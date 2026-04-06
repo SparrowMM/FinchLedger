@@ -1,0 +1,977 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Category = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+};
+
+type CategoriesResponse = {
+  categories: Category[];
+  colorOptions: string[];
+  iconOptions: string[];
+  error?: string;
+};
+
+type IncomeCategoriesResponse = {
+  categories: Category[];
+  colorOptions: string[];
+  iconOptions: string[];
+  error?: string;
+};
+
+type PaymentMethod = {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+};
+
+type PaymentMethodsResponse = {
+  methods: PaymentMethod[];
+  colorOptions: string[];
+  iconOptions: string[];
+  error?: string;
+};
+
+const DEFAULT_NEW_CATEGORY = {
+  name: "",
+  color: "#3B82F6",
+  icon: "📦",
+};
+
+const DEFAULT_NEW_PAYMENT_METHOD = {
+  name: "",
+  color: "#1677FF",
+  icon: "💳",
+};
+
+const DEFAULT_NEW_INCOME_CATEGORY = {
+  name: "",
+  color: "#22C55E",
+  icon: "💼",
+};
+
+export default function CategoriesPage() {
+  const [tab, setTab] = useState<"categories" | "incomeCategories" | "methods">(
+    "categories"
+  );
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [colorOptions, setColorOptions] = useState<string[]>([]);
+  const [iconOptions, setIconOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState(DEFAULT_NEW_CATEGORY.name);
+  const [color, setColor] = useState(DEFAULT_NEW_CATEGORY.color);
+  const [icon, setIcon] = useState(DEFAULT_NEW_CATEGORY.icon);
+
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [methodColorOptions, setMethodColorOptions] = useState<string[]>([]);
+  const [methodIconOptions, setMethodIconOptions] = useState<string[]>([]);
+  const [methodLoading, setMethodLoading] = useState(false);
+  const [methodSaving, setMethodSaving] = useState(false);
+  const [methodError, setMethodError] = useState<string | null>(null);
+  const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
+  const [methodName, setMethodName] = useState(DEFAULT_NEW_PAYMENT_METHOD.name);
+  const [methodColor, setMethodColor] = useState(DEFAULT_NEW_PAYMENT_METHOD.color);
+  const [methodIcon, setMethodIcon] = useState(DEFAULT_NEW_PAYMENT_METHOD.icon);
+
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
+  const [incomeColorOptions, setIncomeColorOptions] = useState<string[]>([]);
+  const [incomeIconOptions, setIncomeIconOptions] = useState<string[]>([]);
+  const [incomeLoading, setIncomeLoading] = useState(false);
+  const [incomeSaving, setIncomeSaving] = useState(false);
+  const [incomeError, setIncomeError] = useState<string | null>(null);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+  const [incomeName, setIncomeName] = useState(DEFAULT_NEW_INCOME_CATEGORY.name);
+  const [incomeColor, setIncomeColor] = useState(
+    DEFAULT_NEW_INCOME_CATEGORY.color
+  );
+  const [incomeIcon, setIncomeIcon] = useState(DEFAULT_NEW_INCOME_CATEGORY.icon);
+
+  const editingItem = useMemo(
+    () => categories.find((item) => item.id === editingId) ?? null,
+    [categories, editingId]
+  );
+  const editingMethod = useMemo(
+    () => methods.find((item) => item.id === editingMethodId) ?? null,
+    [methods, editingMethodId]
+  );
+  const editingIncomeItem = useMemo(
+    () => incomeCategories.find((item) => item.id === editingIncomeId) ?? null,
+    [incomeCategories, editingIncomeId]
+  );
+
+  async function loadCategories() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/expense-categories");
+      const data = (await res.json()) as CategoriesResponse;
+      if (!res.ok) {
+        throw new Error(data.error || "加载类目失败");
+      }
+      setCategories(data.categories ?? []);
+      setColorOptions(data.colorOptions ?? []);
+      setIconOptions(data.iconOptions ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "加载类目失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  async function loadMethods() {
+    setMethodLoading(true);
+    setMethodError(null);
+    try {
+      const res = await fetch("/api/payment-methods");
+      const data = (await res.json()) as PaymentMethodsResponse;
+      if (!res.ok) {
+        throw new Error(data.error || "加载支付方式失败");
+      }
+      setMethods(data.methods ?? []);
+      setMethodColorOptions(data.colorOptions ?? []);
+      setMethodIconOptions(data.iconOptions ?? []);
+    } catch (e) {
+      setMethodError(e instanceof Error ? e.message : "加载支付方式失败");
+    } finally {
+      setMethodLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadMethods();
+  }, []);
+
+  async function loadIncomeCategories() {
+    setIncomeLoading(true);
+    setIncomeError(null);
+    try {
+      const res = await fetch("/api/income-categories");
+      const data = (await res.json()) as IncomeCategoriesResponse;
+      if (!res.ok) {
+        throw new Error(data.error || "加载收入分类失败");
+      }
+      setIncomeCategories(data.categories ?? []);
+      setIncomeColorOptions(data.colorOptions ?? []);
+      setIncomeIconOptions(data.iconOptions ?? []);
+    } catch (e) {
+      setIncomeError(e instanceof Error ? e.message : "加载收入分类失败");
+    } finally {
+      setIncomeLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadIncomeCategories();
+  }, []);
+
+  function resetForm() {
+    setEditingId(null);
+    setName(DEFAULT_NEW_CATEGORY.name);
+    setColor(DEFAULT_NEW_CATEGORY.color);
+    setIcon(DEFAULT_NEW_CATEGORY.icon);
+  }
+
+  function startEdit(item: Category) {
+    setEditingId(item.id);
+    setName(item.name);
+    setColor(item.color);
+    setIcon(item.icon);
+  }
+
+  function resetMethodForm() {
+    setEditingMethodId(null);
+    setMethodName(DEFAULT_NEW_PAYMENT_METHOD.name);
+    setMethodColor(DEFAULT_NEW_PAYMENT_METHOD.color);
+    setMethodIcon(DEFAULT_NEW_PAYMENT_METHOD.icon);
+  }
+
+  function startMethodEdit(item: PaymentMethod) {
+    setEditingMethodId(item.id);
+    setMethodName(item.name);
+    setMethodColor(item.color);
+    setMethodIcon(item.icon);
+  }
+
+  function resetIncomeForm() {
+    setEditingIncomeId(null);
+    setIncomeName(DEFAULT_NEW_INCOME_CATEGORY.name);
+    setIncomeColor(DEFAULT_NEW_INCOME_CATEGORY.color);
+    setIncomeIcon(DEFAULT_NEW_INCOME_CATEGORY.icon);
+  }
+
+  function startIncomeEdit(item: Category) {
+    setEditingIncomeId(item.id);
+    setIncomeName(item.name);
+    setIncomeColor(item.color);
+    setIncomeIcon(item.icon);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      const isEditing = Boolean(editingId);
+      const url = isEditing
+        ? `/api/expense-categories/${encodeURIComponent(editingId!)}`
+        : "/api/expense-categories";
+      const method = isEditing ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          color,
+          icon,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "保存类目失败");
+      }
+      await loadCategories();
+      resetForm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存类目失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: Category) {
+    const ok = window.confirm(`确认删除类目「${item.name}」吗？`);
+    if (!ok) return;
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/expense-categories/${encodeURIComponent(item.id)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "删除类目失败");
+      }
+      await loadCategories();
+      if (editingId === item.id) {
+        resetForm();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除类目失败");
+    }
+  }
+
+  async function handleMethodSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = methodName.trim();
+    if (!trimmedName) return;
+
+    setMethodSaving(true);
+    setMethodError(null);
+    try {
+      const isEditing = Boolean(editingMethodId);
+      const url = isEditing
+        ? `/api/payment-methods/${encodeURIComponent(editingMethodId!)}`
+        : "/api/payment-methods";
+      const method = isEditing ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          color: methodColor,
+          icon: methodIcon,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "保存支付方式失败");
+      }
+      await loadMethods();
+      resetMethodForm();
+    } catch (e) {
+      setMethodError(e instanceof Error ? e.message : "保存支付方式失败");
+    } finally {
+      setMethodSaving(false);
+    }
+  }
+
+  async function handleMethodDelete(item: PaymentMethod) {
+    const ok = window.confirm(`确认删除支付方式「${item.name}」吗？`);
+    if (!ok) return;
+    setMethodError(null);
+    try {
+      const res = await fetch(
+        `/api/payment-methods/${encodeURIComponent(item.id)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "删除支付方式失败");
+      }
+      await loadMethods();
+      if (editingMethodId === item.id) {
+        resetMethodForm();
+      }
+    } catch (e) {
+      setMethodError(e instanceof Error ? e.message : "删除支付方式失败");
+    }
+  }
+
+  async function handleIncomeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = incomeName.trim();
+    if (!trimmedName) return;
+
+    setIncomeSaving(true);
+    setIncomeError(null);
+    try {
+      const isEditing = Boolean(editingIncomeId);
+      const url = isEditing
+        ? `/api/income-categories/${encodeURIComponent(editingIncomeId!)}`
+        : "/api/income-categories";
+      const method = isEditing ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          color: incomeColor,
+          icon: incomeIcon,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "保存收入分类失败");
+      }
+      await loadIncomeCategories();
+      resetIncomeForm();
+    } catch (e) {
+      setIncomeError(e instanceof Error ? e.message : "保存收入分类失败");
+    } finally {
+      setIncomeSaving(false);
+    }
+  }
+
+  async function handleIncomeDelete(item: Category) {
+    const ok = window.confirm(`确认删除收入分类「${item.name}」吗？`);
+    if (!ok) return;
+    setIncomeError(null);
+    try {
+      const res = await fetch(
+        `/api/income-categories/${encodeURIComponent(item.id)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || "删除收入分类失败");
+      }
+      await loadIncomeCategories();
+      if (editingIncomeId === item.id) {
+        resetIncomeForm();
+      }
+    } catch (e) {
+      setIncomeError(e instanceof Error ? e.message : "删除收入分类失败");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          配置管理
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          统一管理支出分类、收入分类和支付方式，支持扩展、删除，并配置颜色和图标。
+        </p>
+      </div>
+
+      <div className="inline-flex rounded-full border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <button
+          type="button"
+          onClick={() => setTab("categories")}
+          className={`rounded-full px-4 py-1.5 text-xs transition ${
+            tab === "categories"
+              ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          }`}
+        >
+          支出分类管理
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("incomeCategories")}
+          className={`rounded-full px-4 py-1.5 text-xs transition ${
+            tab === "incomeCategories"
+              ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          }`}
+        >
+          收入分类管理
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("methods")}
+          className={`rounded-full px-4 py-1.5 text-xs transition ${
+            tab === "methods"
+              ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          }`}
+        >
+          支付方式管理
+        </button>
+      </div>
+
+      {tab === "categories" ? (
+        <>
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              {error}
+            </div>
+          )}
+          <div className="grid gap-4 md:grid-cols-5">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-2">
+              <h2 className="text-sm font-medium">
+                {editingItem ? "编辑支出分类" : "新增支出分类"}
+              </h2>
+              <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
+                <div>
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400">
+                    支出分类名称
+                  </label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="例如：交通"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-zinc-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">颜色</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {colorOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setColor(item)}
+                        className={`h-7 w-7 rounded-full border-2 transition ${
+                          color === item
+                            ? "border-zinc-900 dark:border-zinc-100"
+                            : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: item }}
+                        aria-label={`选择颜色 ${item}`}
+                        title={item}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">图标</div>
+                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-auto rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
+                    {iconOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setIcon(item)}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
+                          icon === item
+                            ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+                            : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                        }`}
+                        title={item}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="text-zinc-500 dark:text-zinc-400">预览</div>
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-white" style={{ backgroundColor: color }}>
+                    <span>{icon}</span>
+                    <span>{name.trim() || "支出分类名称"}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={saving || !name.trim()}
+                    className="inline-flex items-center rounded-full bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-50 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
+                  >
+                    {saving ? "保存中..." : editingItem ? "保存修改" : "新增支出分类"}
+                  </button>
+                  {editingItem && (
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="inline-flex items-center rounded-full border border-zinc-200 px-4 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      取消编辑
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-medium">当前支出分类列表</h2>
+                  <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    双击任意分类可快速进入编辑，也可在操作下拉中编辑/删除。
+                  </p>
+                </div>
+                {loading && <span className="text-xs text-zinc-400">加载中...</span>}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    <tr>
+                      <th className="py-2 pr-4">分类</th>
+                      <th className="py-2 pr-4">颜色</th>
+                      <th className="py-2 pr-4">图标</th>
+                      <th className="py-2 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {categories.length ? (
+                      categories.map((item) => (
+                        <tr key={item.id} onDoubleClick={() => startEdit(item)}>
+                          <td className="py-2 pr-4">
+                            <span
+                              className="inline-flex cursor-pointer items-center gap-2 rounded-full px-2 py-0.5 text-white"
+                              style={{ backgroundColor: item.color }}
+                              title="双击编辑该分类"
+                            >
+                              <span>{item.icon}</span>
+                              <span>{item.name}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4">
+                            <div className="inline-flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span>{item.color}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-4 text-lg">{item.icon}</td>
+                          <td className="py-2 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <select
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const action = e.target.value;
+                                  if (action === "edit") {
+                                    startEdit(item);
+                                  } else if (action === "delete" && item.name !== "待确认") {
+                                    void handleDelete(item);
+                                  }
+                                  e.target.value = "";
+                                }}
+                                className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[10px] text-zinc-600 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:focus:border-zinc-500"
+                              >
+                                <option value="">操作</option>
+                                <option value="edit">编辑</option>
+                                <option value="delete" disabled={item.name === "待确认"}>
+                                  删除
+                                </option>
+                              </select>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="py-6 text-center text-xs text-zinc-400"
+                        >
+                          暂无支出分类数据
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : tab === "incomeCategories" ? (
+        <>
+          {incomeError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              {incomeError}
+            </div>
+          )}
+          <div className="grid gap-4 md:grid-cols-5">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-2">
+              <h2 className="text-sm font-medium">
+                {editingIncomeItem ? "编辑收入分类" : "新增收入分类"}
+              </h2>
+              <form className="mt-4 space-y-4" onSubmit={handleIncomeSubmit}>
+                <div>
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400">
+                    收入分类名称
+                  </label>
+                  <input
+                    value={incomeName}
+                    onChange={(e) => setIncomeName(e.target.value)}
+                    placeholder="例如：兼职"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-zinc-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">颜色</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {incomeColorOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setIncomeColor(item)}
+                        className={`h-7 w-7 rounded-full border-2 transition ${
+                          incomeColor === item
+                            ? "border-zinc-900 dark:border-zinc-100"
+                            : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: item }}
+                        aria-label={`选择颜色 ${item}`}
+                        title={item}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">图标</div>
+                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-auto rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
+                    {incomeIconOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setIncomeIcon(item)}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
+                          incomeIcon === item
+                            ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+                            : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                        }`}
+                        title={item}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="text-zinc-500 dark:text-zinc-400">预览</div>
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-white" style={{ backgroundColor: incomeColor }}>
+                    <span>{incomeIcon}</span>
+                    <span>{incomeName.trim() || "收入分类名称"}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={incomeSaving || !incomeName.trim()}
+                    className="inline-flex items-center rounded-full bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-50 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
+                  >
+                    {incomeSaving
+                      ? "保存中..."
+                      : editingIncomeItem
+                      ? "保存修改"
+                      : "新增收入分类"}
+                  </button>
+                  {editingIncomeItem && (
+                    <button
+                      type="button"
+                      onClick={resetIncomeForm}
+                      className="inline-flex items-center rounded-full border border-zinc-200 px-4 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      取消编辑
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium">当前收入分类列表</h2>
+                {incomeLoading && (
+                  <span className="text-xs text-zinc-400">加载中...</span>
+                )}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    <tr>
+                      <th className="py-2 pr-4">分类</th>
+                      <th className="py-2 pr-4">颜色</th>
+                      <th className="py-2 pr-4">图标</th>
+                      <th className="py-2 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {incomeCategories.length ? (
+                      incomeCategories.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-2 pr-4">
+                            <span
+                              className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 text-white"
+                              style={{ backgroundColor: item.color }}
+                            >
+                              <span>{item.icon}</span>
+                              <span>{item.name}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4">
+                            <div className="inline-flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span>{item.color}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-4 text-lg">{item.icon}</td>
+                          <td className="py-2 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startIncomeEdit(item)}
+                                className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                type="button"
+                                disabled={item.name === "待确认"}
+                                onClick={() => handleIncomeDelete(item)}
+                                className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="py-6 text-center text-xs text-zinc-400"
+                        >
+                          暂无收入分类数据
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {methodError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              {methodError}
+            </div>
+          )}
+          <div className="grid gap-4 md:grid-cols-5">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-2">
+              <h2 className="text-sm font-medium">
+                {editingMethod ? "编辑支付方式" : "新增支付方式"}
+              </h2>
+              <form className="mt-4 space-y-4" onSubmit={handleMethodSubmit}>
+                <div>
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400">
+                    支付方式名称
+                  </label>
+                  <input
+                    value={methodName}
+                    onChange={(e) => setMethodName(e.target.value)}
+                    placeholder="例如：浦发银行卡"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-zinc-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">颜色</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {methodColorOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setMethodColor(item)}
+                        className={`h-7 w-7 rounded-full border-2 transition ${
+                          methodColor === item
+                            ? "border-zinc-900 dark:border-zinc-100"
+                            : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: item }}
+                        aria-label={`选择颜色 ${item}`}
+                        title={item}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">图标</div>
+                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-auto rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
+                    {methodIconOptions.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setMethodIcon(item)}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
+                          methodIcon === item
+                            ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+                            : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                        }`}
+                        title={item}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="text-zinc-500 dark:text-zinc-400">预览</div>
+                  <div className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-white" style={{ backgroundColor: methodColor }}>
+                    <span>{methodIcon}</span>
+                    <span>{methodName.trim() || "支付方式名称"}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={methodSaving || !methodName.trim()}
+                    className="inline-flex items-center rounded-full bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-50 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
+                  >
+                    {methodSaving
+                      ? "保存中..."
+                      : editingMethod
+                      ? "保存修改"
+                      : "新增支付方式"}
+                  </button>
+                  {editingMethod && (
+                    <button
+                      type="button"
+                      onClick={resetMethodForm}
+                      className="inline-flex items-center rounded-full border border-zinc-200 px-4 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    >
+                      取消编辑
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium">当前支付方式列表</h2>
+                {methodLoading && (
+                  <span className="text-xs text-zinc-400">加载中...</span>
+                )}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    <tr>
+                      <th className="py-2 pr-4">支付方式</th>
+                      <th className="py-2 pr-4">颜色</th>
+                      <th className="py-2 pr-4">图标</th>
+                      <th className="py-2 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {methods.length ? (
+                      methods.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-2 pr-4">
+                            <span
+                              className="inline-flex items-center gap-2 rounded-full px-2 py-0.5 text-white"
+                              style={{ backgroundColor: item.color }}
+                            >
+                              <span>{item.icon}</span>
+                              <span>{item.name}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4">
+                            <div className="inline-flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span>{item.color}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-4 text-lg">{item.icon}</td>
+                          <td className="py-2 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startMethodEdit(item)}
+                                className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMethodDelete(item)}
+                                className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="py-6 text-center text-xs text-zinc-400"
+                        >
+                          暂无支付方式数据
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

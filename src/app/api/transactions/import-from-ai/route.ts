@@ -1,0 +1,272 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { parseChinaDateTimeToUtc } from "@/lib/china-time";
+import {
+  DEFAULT_EXPENSE_CATEGORIES,
+  normalizeExpenseCategoryFromList,
+} from "@/lib/expense-categories";
+import { listExpenseCategoryNames } from "@/lib/expense-categories-db";
+import {
+  DEFAULT_INCOME_CATEGORIES,
+  normalizeIncomeCategoryFromList,
+} from "@/lib/income-categories";
+import { listIncomeCategoryNames } from "@/lib/income-categories-db";
+import {
+  DEFAULT_PAYMENT_METHODS,
+  normalizePaymentMethodFromList,
+} from "@/lib/payment-methods";
+import { listPaymentMethodNames } from "@/lib/payment-methods-db";
+import type { TransactionType } from "@prisma/client";
+
+type Channel = "alipay" | "wechat" | "cmb" | "icbc";
+
+type AITransaction = {
+  type: "expense" | "income";
+  date: string;
+  time?: string;
+  amount: number;
+  currency: string;
+  category: string;
+  merchant?: string;
+  method?: string;
+  note?: string;
+};
+
+type ImportFromAIBody = {
+  channel: Channel;
+  transactions: AITransaction[];
+};
+
+function nowMs() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+function createRequestId(prefix: string) {
+  const randomPart =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${randomPart}`;
+}
+
+function normalizeAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const normalized = trimmed.replace(/[,\s]/g, "").replace(/[¥￥]/g, "");
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+}
+
+function isCmbLifeRepayment(t: AITransaction) {
+  const text = `${t.category ?? ""} ${t.merchant ?? ""} ${t.note ?? ""} ${t.method ?? ""}`;
+  return text.includes("掌上生活") && text.includes("还款");
+}
+
+function resolveExpenseCategory(
+  t: AITransaction,
+  allowedExpenseCategoryNames: string[]
+): string {
+  const text = `${t.category ?? ""} ${t.merchant ?? ""} ${t.note ?? ""}`;
+  if (
+    /(app\s*store|apple\.com\/bill|apple\s*services|icloud|i\s*cloud|itunes)/i.test(
+      text
+    ) &&
+    allowedExpenseCategoryNames.includes("Apple")
+  ) {
+    return "Apple";
+  }
+  if (
+    /(理发|剪发|洗剪吹|烫发|染发|护发|美发|发廊|toni&guy|barber|hair)/i.test(
+      text
+    ) &&
+    allowedExpenseCategoryNames.includes("生活")
+  ) {
+    return "生活";
+  }
+  if (
+    /停车|停车费|停车场|路侧停车/.test(text) &&
+    allowedExpenseCategoryNames.includes("交通")
+  ) {
+    return "交通";
+  }
+  if (
+    text.includes("亲情卡") &&
+    allowedExpenseCategoryNames.includes("人情-亲人")
+  ) {
+    return "人情-亲人";
+  }
+  return normalizeExpenseCategoryFromList(t.category, allowedExpenseCategoryNames);
+}
+
+export async function POST(req: Request) {
+  const requestId = createRequestId("imp");
+  const requestStart = nowMs();
+  let body: ImportFromAIBody;
+
+  try {
+    const parseBodyStart = nowMs();
+    body = await req.json();
+    console.log("[TRANSACTIONS-IMPORT] Request body parsed", {
+      requestId,
+      parseBodyElapsedMs: Number((nowMs() - parseBodyStart).toFixed(2)),
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "请求体格式错误，应为 JSON。" },
+      { status: 400 }
+    );
+  }
+
+  const { channel, transactions } = body;
+
+  if (!channel || !["alipay", "wechat", "cmb", "icbc"].includes(channel)) {
+    return NextResponse.json(
+      { error: "缺少或不支持的渠道类型 channel。" },
+      { status: 400 }
+    );
+  }
+
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return NextResponse.json(
+      { error: "缺少要导入的交易列表 transactions。" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const metaLoadStart = nowMs();
+    const categoryNames = await listExpenseCategoryNames().catch(() => []);
+    const incomeCategoryNames = await listIncomeCategoryNames().catch(() => []);
+    const paymentMethodNames = await listPaymentMethodNames().catch(() => []);
+    const metaLoadElapsedMs = nowMs() - metaLoadStart;
+    const allowedExpenseCategoryNames =
+      categoryNames.length > 0
+        ? categoryNames
+        : DEFAULT_EXPENSE_CATEGORIES.map((item) => item.name);
+    const allowedIncomeCategoryNames =
+      incomeCategoryNames.length > 0
+        ? incomeCategoryNames
+        : DEFAULT_INCOME_CATEGORIES.map((item) => item.name);
+    const allowedPaymentMethods =
+      paymentMethodNames.length > 0
+        ? paymentMethodNames
+        : DEFAULT_PAYMENT_METHODS.map((item) => item.name);
+
+    const normalizedTransactions = transactions
+      .map((t) => ({
+        ...t,
+        normalizedAmount: normalizeAmount((t as { amount?: unknown }).amount),
+      }))
+      .filter((t) => t.normalizedAmount !== null);
+
+    const buildDataStart = nowMs();
+    const data = normalizedTransactions
+      // 不将招商银行的「理财 / 基金申购 / 基金买入」类记录导入记账系统
+      .filter((t) => {
+        if (channel !== "cmb") return true;
+        const text = `${t.category ?? ""} ${t.merchant ?? ""} ${t.note ?? ""}`;
+        return (
+          !text.includes("理财") &&
+          !text.includes("基金申购") &&
+          !text.includes("基金买入") &&
+          !isCmbLifeRepayment(t)
+        );
+      })
+      .map((t) => {
+        const baseDate = t.date?.trim() || "";
+        const timePart = t.time?.trim();
+
+        const name =
+          (t.merchant && t.merchant.trim()) ||
+          (t.category && t.category.trim()) ||
+          "未命名交易";
+
+        const rawAccount =
+          (t.method && t.method.trim()) ||
+          (channel === "alipay"
+            ? "支付宝"
+            : channel === "wechat"
+            ? "微信"
+            : channel === "cmb"
+            ? "招商银行"
+            : "工商银行");
+
+        const prismaType: TransactionType =
+          t.type === "income" ? "income" : "expense";
+
+        const parsedDate = baseDate
+          ? parseChinaDateTimeToUtc(baseDate, timePart)
+          : new Date();
+
+        return {
+          date: parsedDate,
+          name,
+          type: prismaType,
+          amount: t.normalizedAmount,
+          category:
+            prismaType === "expense"
+              ? resolveExpenseCategory(t, allowedExpenseCategoryNames)
+              : normalizeIncomeCategoryFromList(
+                  t.category,
+                  allowedIncomeCategoryNames
+                ),
+          account: normalizePaymentMethodFromList(
+            rawAccount,
+            allowedPaymentMethods
+          ),
+          note: t.note,
+        };
+      });
+    const buildDataElapsedMs = nowMs() - buildDataStart;
+
+    if (!data.length) {
+      return NextResponse.json(
+        { error: "没有可导入的有效交易记录。" },
+        { status: 400 }
+      );
+    }
+
+    const writeDbStart = nowMs();
+    const result = await prisma.transaction.createMany({
+      data,
+    });
+    const writeDbElapsedMs = nowMs() - writeDbStart;
+
+    console.log("[TRANSACTIONS-IMPORT] Import completed", {
+      requestId,
+      channel,
+      inputTransactionsCount: transactions.length,
+      normalizedTransactionsCount: normalizedTransactions.length,
+      toInsertCount: data.length,
+      insertedCount: result.count,
+      metaLoadElapsedMs: Number(metaLoadElapsedMs.toFixed(2)),
+      buildDataElapsedMs: Number(buildDataElapsedMs.toFixed(2)),
+      writeDbElapsedMs: Number(writeDbElapsedMs.toFixed(2)),
+      totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
+    });
+
+    return NextResponse.json({
+      insertedCount: result.count,
+    });
+  } catch (e) {
+    console.error("[TRANSACTIONS-IMPORT] Import from AI failed", {
+      requestId,
+      error: e,
+      totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
+    });
+    return NextResponse.json(
+      { error: "保存交易到数据库时发生错误，请稍后重试。" },
+      { status: 500 }
+    );
+  }
+}
+

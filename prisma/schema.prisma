@@ -4,12 +4,12 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Transaction {
@@ -22,6 +22,41 @@ model Transaction {
   account   String
   note      String?
   createdAt DateTime         @default(now())
+}
+
+model MonthlyExpenseAnalysis {
+  id        String   @id @default(uuid())
+  month     String   // YYYY-MM
+  type      String   // 目前固定为 "expense"，预留扩展空间
+  content   String   // AI 分析结果原文（JSON 或 Markdown 文本）
+  createdAt DateTime @default(now())
+}
+
+model ExpenseCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IncomeCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PaymentMethod {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum TransactionType {
