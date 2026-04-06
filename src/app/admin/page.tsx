@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 type DeleteScope = "all-expense" | "all-income" | "month";
 
@@ -105,7 +106,14 @@ export default function AdminPage() {
           管理员操作
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          危险操作区：支持清空全部支出、全部收入，或清空某个月的全部流水。为避免误删，执行前需要二次确认。
+          AI 系统提示词请在{" "}
+          <Link
+            href="/prompts"
+            className="text-zinc-800 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500 dark:text-zinc-200 dark:decoration-zinc-600"
+          >
+            AI 提示词
+          </Link>{" "}
+          页面预览与编辑。本页为危险操作区：支持清空全部支出、全部收入，或清空某个月的全部流水。为避免误删，执行前需要二次确认。
         </p>
       </div>
 

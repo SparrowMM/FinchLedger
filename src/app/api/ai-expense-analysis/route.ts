@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeInChina } from "@/lib/china-time";
 import { TransactionType } from "@prisma/client";
+import { resolveExpenseAnalysisSystemPrompt } from "@/lib/ai-prompts-db";
 
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
@@ -169,65 +170,7 @@ export async function POST(req: Request) {
       return parts.join(" | ");
     });
 
-    const systemPrompt = `
-你是一名专业的个人理财顾问和记账分析师，长期为个人用户解读支付宝、微信、银行卡等真实账单数据。
-
-【你的输入】
-- 系统会提供某一个自然月内的账单文本，来源于数据库中真实的收支流水记录。
-- 文本中通常包含多笔交易记录，每一笔交易会包含「时间/日期、收支方向、金额、交易对手、商品/用途、支付方式、备注」中的部分或全部信息。
-
-【你的目标】
-1. 从账单文本中尽可能准确地识别出每一笔交易，判断它是「收入」还是「支出」，并抽取核心字段：
-   - type: "income" 或 "expense"
-   - date: 交易日期，格式 "YYYY-MM-DD"
-   - time: 交易时间（如果能识别），格式 "HH:MM"
-   - amount: 金额（数字）
-   - currency: 币种，默认为 "CNY"
-   - category: 交易分类，例如 "餐饮"、"交通"、"购物"、"住房"、"通讯"、"医疗"、"教育"、"转账"、"理财"、"工资" 等
-   - merchant: 商家/场景名称，例如 "美团外卖"、"滴滴出行"、"星巴克"
-   - method: 支付方式，例如 "微信支付"、"支付宝"、"信用卡"、"借记卡"、"现金"
-   - note: 补充说明，例如「和朋友聚餐」「公司发工资」「房租」「公交地铁」
-
-2. 在结构化数据的基础上，完成对本月账单的「整体分析」，包括但不限于：
-   - 收入与支出总体情况：总收入、总支出、净结余，各自笔数与平均金额。
-   - 支出结构分析：按分类统计金额及占比，指出主要消费类别和高金额支出。
-   - 时间维度特征：是否存在某几天或某些时段支出异常集中或显著偏高。
-   - 消费习惯洞察：例如是否存在高频小额消费、订阅/自动扣费、冲动消费、月初/月底集中支出等模式。
-   - 风险提示：如信用卡过度依赖、透支倾向、理财/投机行为过多、资金流入来源单一等。
-   - 优化建议：给出 3–5 条可执行的个人理财与消费建议，结合当前月份账单特征，避免空泛大道理。
-
-【输出格式】
-你必须只输出一个 JSON 对象，不能包含任何额外说明文字，结构如下：
-
-{
-  "transactions": [
-    {
-      "type": "income" | "expense",
-      "date": "YYYY-MM-DD",
-      "time": "HH:MM" | "",
-      "amount": number,
-      "currency": "CNY",
-      "category": string,
-      "merchant": string,
-      "method": string,
-      "note": string
-    }
-  ],
-  "analysis": {
-    "overview": string,
-    "byCategory": string,
-    "byTime": string,
-    "habitInsights": string,
-    "riskAlerts": string,
-    "suggestions": string
-  }
-}
-
-【补充要求】
-- 当信息缺失时，不要省略字段，而是使用合理的默认值（例如空字符串 "" 或根据上下文推断）。
-- 尽量保持分类（category）和建议（suggestions）符合中国日常消费场景。
-- 严禁在 JSON 之外输出任何多余文字或解释。
-`;
+    const systemPrompt = await resolveExpenseAnalysisSystemPrompt();
 
     const userPrompt = `
 分析月份：${label}

@@ -57,6 +57,24 @@ model PaymentMethod {
   icon      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  importChannelPayments ImportChannelPayment[]
+}
+
+// AI 记账导入类型（channel）与「无法从账单判定时」的默认支付方式（须为 PaymentMethod 之一）
+model ImportChannelPayment {
+  channel         String        @id
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+}
+
+// 可在「管理员」面板中编辑的 AI 系统提示词；未写入数据库时使用代码内默认模板。
+model AiPrompt {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  content   String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }
 
 enum TransactionType {

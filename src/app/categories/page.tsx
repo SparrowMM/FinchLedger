@@ -37,6 +37,13 @@ type PaymentMethodsResponse = {
   error?: string;
 };
 
+type ImportChannelMappingRow = {
+  channel: string;
+  label: string;
+  paymentMethodId: string | null;
+  paymentMethodName: string | null;
+};
+
 const DEFAULT_NEW_CATEGORY = {
   name: "",
   color: "#3B82F6",
@@ -81,6 +88,15 @@ export default function CategoriesPage() {
   const [methodName, setMethodName] = useState(DEFAULT_NEW_PAYMENT_METHOD.name);
   const [methodColor, setMethodColor] = useState(DEFAULT_NEW_PAYMENT_METHOD.color);
   const [methodIcon, setMethodIcon] = useState(DEFAULT_NEW_PAYMENT_METHOD.icon);
+
+  const [importMappings, setImportMappings] = useState<
+    ImportChannelMappingRow[]
+  >([]);
+  const [importMapLoading, setImportMapLoading] = useState(false);
+  const [importMapError, setImportMapError] = useState<string | null>(null);
+  const [importMapSavingChannel, setImportMapSavingChannel] = useState<
+    string | null
+  >(null);
 
   const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
   const [incomeColorOptions, setIncomeColorOptions] = useState<string[]>([]);
@@ -153,6 +169,34 @@ export default function CategoriesPage() {
   useEffect(() => {
     loadMethods();
   }, []);
+
+  async function loadImportMappings() {
+    setImportMapLoading(true);
+    setImportMapError(null);
+    try {
+      const res = await fetch("/api/import-channel-payments");
+      const data = (await res.json().catch(() => null)) as {
+        mappings?: ImportChannelMappingRow[];
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        throw new Error(data?.error || "加载导入类型映射失败");
+      }
+      setImportMappings(data?.mappings ?? []);
+    } catch (e) {
+      setImportMapError(
+        e instanceof Error ? e.message : "加载导入类型映射失败"
+      );
+    } finally {
+      setImportMapLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "methods") {
+      void loadImportMappings();
+    }
+  }, [tab]);
 
   async function loadIncomeCategories() {
     setIncomeLoading(true);
@@ -303,6 +347,7 @@ export default function CategoriesPage() {
         throw new Error(data?.error || "保存支付方式失败");
       }
       await loadMethods();
+      await loadImportMappings();
       resetMethodForm();
     } catch (e) {
       setMethodError(e instanceof Error ? e.message : "保存支付方式失败");
@@ -325,11 +370,38 @@ export default function CategoriesPage() {
         throw new Error(data?.error || "删除支付方式失败");
       }
       await loadMethods();
+      await loadImportMappings();
       if (editingMethodId === item.id) {
         resetMethodForm();
       }
     } catch (e) {
       setMethodError(e instanceof Error ? e.message : "删除支付方式失败");
+    }
+  }
+
+  async function handleImportMappingChange(
+    channel: string,
+    paymentMethodId: string
+  ) {
+    setImportMapSavingChannel(channel);
+    setImportMapError(null);
+    try {
+      const res = await fetch("/api/import-channel-payments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, paymentMethodId }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        throw new Error(data?.error || "保存映射失败");
+      }
+      await loadImportMappings();
+    } catch (e) {
+      setImportMapError(e instanceof Error ? e.message : "保存映射失败");
+    } finally {
+      setImportMapSavingChannel(null);
     }
   }
 
@@ -802,6 +874,11 @@ export default function CategoriesPage() {
               {methodError}
             </div>
           )}
+          {importMapError && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+              {importMapError}
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-5">
             <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-2">
               <h2 className="text-sm font-medium">
@@ -962,6 +1039,85 @@ export default function CategoriesPage() {
                           className="py-6 text-center text-xs text-zinc-400"
                         >
                           暂无支付方式数据
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  AI 记账 · 导入类型与默认支付方式
+                </h2>
+                {importMapLoading && (
+                  <span className="text-xs text-zinc-400">加载映射…</span>
+                )}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                与「AI 自动记账」页选择的导入类型（channel）对应。当模型无法从账单明确判断
+                method 时，使用此处映射的支付方式（须为上方列表中的名称）。提示词中的说明会随本表自动更新。
+              </p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-left text-xs">
+                  <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    <tr>
+                      <th className="py-2 pr-4">导入类型</th>
+                      <th className="py-2 pr-4">channel</th>
+                      <th className="py-2">默认支付方式</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {importMappings.length ? (
+                      importMappings.map((m) => (
+                        <tr key={m.channel}>
+                          <td className="py-2 pr-4">{m.label}</td>
+                          <td className="py-2 pr-4 font-mono text-[10px] text-zinc-500">
+                            {m.channel}
+                          </td>
+                          <td className="py-2">
+                            <select
+                              value={m.paymentMethodId ?? ""}
+                              disabled={
+                                !methods.length ||
+                                importMapSavingChannel === m.channel
+                              }
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v) {
+                                  void handleImportMappingChange(m.channel, v);
+                                }
+                              }}
+                              className="max-w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs outline-none focus:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-500"
+                            >
+                              {!m.paymentMethodId && (
+                                <option value="">请选择</option>
+                              )}
+                              {methods.map((pm) => (
+                                <option key={pm.id} value={pm.id}>
+                                  {pm.name}
+                                </option>
+                              ))}
+                            </select>
+                            {importMapSavingChannel === m.channel && (
+                              <span className="ml-2 text-[10px] text-zinc-400">
+                                保存中…
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          className="py-6 text-center text-xs text-zinc-400"
+                        >
+                          {importMapLoading
+                            ? "加载中…"
+                            : "暂无映射数据，请刷新页面"}
                         </td>
                       </tr>
                     )}

@@ -16,6 +16,9 @@ import {
   normalizePaymentMethodFromList,
 } from "@/lib/payment-methods";
 import { listPaymentMethodNames } from "@/lib/payment-methods-db";
+import type { BookkeepingImportChannel } from "@/lib/import-channels";
+import { resolveDefaultPaymentMethodNameForChannel } from "@/lib/import-channel-payment-db";
+import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
 import type { TransactionType } from "@prisma/client";
 
 type Channel = "alipay" | "wechat" | "cmb" | "icbc";
@@ -161,6 +164,12 @@ export async function POST(req: Request) {
         ? paymentMethodNames
         : DEFAULT_PAYMENT_METHODS.map((item) => item.name);
 
+    const importDefaultMethodName =
+      await resolveDefaultPaymentMethodNameForChannel(
+        channel as BookkeepingImportChannel,
+        allowedPaymentMethods
+      );
+
     const normalizedTransactions = transactions
       .map((t) => ({
         ...t,
@@ -190,8 +199,17 @@ export async function POST(req: Request) {
           (t.category && t.category.trim()) ||
           "未命名交易";
 
+        const rawMethodHint = (t.method && t.method.trim()) || "";
+
+        const coercedMethod = coercePaymentMethodAfterAiParse(
+          channel,
+          rawMethodHint || undefined,
+          allowedPaymentMethods,
+          importDefaultMethodName
+        );
+
         const rawAccount =
-          (t.method && t.method.trim()) ||
+          coercedMethod ||
           (channel === "alipay"
             ? "支付宝"
             : channel === "wechat"

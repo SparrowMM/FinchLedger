@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
+
+const IMPORT_CHANNEL_DEFAULT_FALLBACK: Record<
+  "alipay" | "wechat" | "cmb" | "icbc",
+  string
+> = {
+  alipay: "支付宝",
+  wechat: "微信",
+  cmb: "招商银行",
+  icbc: "工商银行",
+};
 
 type AITransaction = {
   type: "expense" | "income";
@@ -170,11 +181,25 @@ export default function AIBookkeepingPage() {
   );
   const [expenseCategories, setExpenseCategories] = useState<CategoryMeta[]>([]);
   const [incomeCategories, setIncomeCategories] = useState<CategoryMeta[]>([]);
+  const [importPaymentDefaults, setImportPaymentDefaults] = useState<
+    Record<string, string>
+  >({});
 
   const paymentMethodMetaMap = useMemo(
     () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
     [paymentMethodMetas]
   );
+
+  const allowedPaymentMethodNames = useMemo(
+    () => paymentMethodMetas.map((m) => m.name),
+    [paymentMethodMetas]
+  );
+
+  const importDefaultForCurrentChannel = useMemo(() => {
+    return (
+      importPaymentDefaults[channel] ?? IMPORT_CHANNEL_DEFAULT_FALLBACK[channel]
+    );
+  }, [importPaymentDefaults, channel]);
 
   const fileAccept =
     channel === "alipay"
@@ -237,6 +262,35 @@ export default function AIBookkeepingPage() {
       }
     }
     loadPaymentMethodMetas();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadImportDefaults() {
+      try {
+        const res = await fetch("/api/import-channel-payments");
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.mappings) return;
+        const map: Record<string, string> = {};
+        for (const m of json.mappings as Array<{
+          channel: string;
+          paymentMethodName: string | null;
+        }>) {
+          if (m.paymentMethodName) {
+            map[m.channel] = m.paymentMethodName;
+          }
+        }
+        if (!cancelled) {
+          setImportPaymentDefaults(map);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void loadImportDefaults();
     return () => {
       cancelled = true;
     };
@@ -465,7 +519,26 @@ export default function AIBookkeepingPage() {
       }
 
       setResult(parsedResult);
-      setDraftTransactions(parsedResult.transactions ?? []);
+      const namesForCoerce =
+        allowedPaymentMethodNames.length > 0
+          ? allowedPaymentMethodNames
+          : [
+              "支付宝",
+              "微信",
+              "招商银行",
+              "工商银行",
+            ];
+      setDraftTransactions(
+        (parsedResult.transactions ?? []).map((t) => ({
+          ...t,
+          method: coercePaymentMethodAfterAiParse(
+            channel,
+            t.method,
+            namesForCoerce,
+            importDefaultForCurrentChannel
+          ),
+        }))
+      );
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "AI 解析失败，请稍后重试。"

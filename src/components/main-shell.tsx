@@ -12,6 +12,7 @@ const navItems = [
   { href: "/income", label: "收入流水" },
   { href: "/categories", label: "支出分类管理" },
   { href: "/admin", label: "管理员" },
+  { href: "/prompts", label: "AI 提示词" },
   { href: "/ai", label: "AI 自动记账" },
 ];
 
