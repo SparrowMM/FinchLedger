@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
 import React from "react";
+import { BillAgentWidget } from "./bill-agent-widget";
 
 const navItems = [
   { href: "/", label: "Dashboard" },
@@ -75,6 +76,8 @@ export function MainShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8">
         {children}
       </main>
+
+      <BillAgentWidget />
     </div>
   );
 }
