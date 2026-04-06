@@ -62,10 +62,19 @@ const DEFAULT_NEW_INCOME_CATEGORY = {
   icon: "💼",
 };
 
+type CategoryRule = {
+  id: string;
+  type: "expense" | "income";
+  merchantName: string;
+  category: string;
+  source: string;
+  updatedAt: string;
+};
+
 export default function CategoriesPage() {
-  const [tab, setTab] = useState<"categories" | "incomeCategories" | "methods">(
-    "categories"
-  );
+  const [tab, setTab] = useState<
+    "categories" | "incomeCategories" | "methods" | "rules"
+  >("categories");
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [colorOptions, setColorOptions] = useState<string[]>([]);
@@ -110,6 +119,13 @@ export default function CategoriesPage() {
     DEFAULT_NEW_INCOME_CATEGORY.color
   );
   const [incomeIcon, setIncomeIcon] = useState(DEFAULT_NEW_INCOME_CATEGORY.icon);
+
+  const [rules, setRules] = useState<CategoryRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [learningFromHistory, setLearningFromHistory] = useState(false);
+  const [rulesMessage, setRulesMessage] = useState<string | null>(null);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
 
   const editingItem = useMemo(
     () => categories.find((item) => item.id === editingId) ?? null,
@@ -220,6 +236,71 @@ export default function CategoriesPage() {
   useEffect(() => {
     loadIncomeCategories();
   }, []);
+
+  async function loadRules() {
+    setRulesLoading(true);
+    setRulesError(null);
+    try {
+      const res = await fetch("/api/category-rules");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "加载分类规则失败");
+      }
+      setRules(data.rules ?? []);
+    } catch (e) {
+      setRulesError(e instanceof Error ? e.message : "加载分类规则失败");
+    } finally {
+      setRulesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "rules") {
+      loadRules();
+    }
+  }, [tab]);
+
+  async function handleLearnFromHistory() {
+    setLearningFromHistory(true);
+    setRulesError(null);
+    setRulesMessage(null);
+    try {
+      const res = await fetch("/api/category-rules/learn-from-history", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "从历史学习失败");
+      }
+      setRulesMessage(
+        `已扫描 ${data.scannedTransactions} 条历史交易，识别 ${data.uniqueMerchants} 个商户，生成/更新 ${data.rulesCreated} 条规则。`
+      );
+      await loadRules();
+    } catch (e) {
+      setRulesError(e instanceof Error ? e.message : "从历史学习失败");
+    } finally {
+      setLearningFromHistory(false);
+    }
+  }
+
+  async function handleDeleteRule(id: string) {
+    if (!window.confirm("确定删除该分类规则？")) return;
+    setDeletingRuleId(id);
+    try {
+      const res = await fetch(`/api/category-rules/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "删除规则失败");
+      }
+      setRules((prev) => prev.filter((r) => r.id !== id));
+    } catch (e) {
+      setRulesError(e instanceof Error ? e.message : "删除规则失败");
+    } finally {
+      setDeletingRuleId(null);
+    }
+  }
 
   function resetForm() {
     setEditingId(null);
@@ -506,6 +587,17 @@ export default function CategoriesPage() {
           }`}
         >
           支付方式管理
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("rules")}
+          className={`rounded-full px-4 py-1.5 text-xs transition ${
+            tab === "rules"
+              ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          }`}
+        >
+          分类规则
         </button>
       </div>
 
@@ -1124,6 +1216,122 @@ export default function CategoriesPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === "rules" && (
+        <>
+          {rulesError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              {rulesError}
+            </div>
+          )}
+          {rulesMessage && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {rulesMessage}
+            </div>
+          )}
+
+          <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-sm font-medium">
+                  自动分类规则
+                </h2>
+                <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  系统会从你确认过的账单中自动学习「商户名 → 分类」的映射规则。下次导入同一商户的账单时，不再需要手动确认分类。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLearnFromHistory}
+                disabled={learningFromHistory}
+                className="inline-flex shrink-0 items-center rounded-full bg-zinc-900 px-4 py-1.5 text-xs font-medium text-zinc-50 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-400"
+              >
+                {learningFromHistory
+                  ? "正在学习..."
+                  : "从历史交易学习规则"}
+              </button>
+            </div>
+
+            <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              共 {rules.length} 条规则
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                  <tr>
+                    <th className="py-2 pr-4">类型</th>
+                    <th className="py-2 pr-4">商户名</th>
+                    <th className="py-2 pr-4">自动归类</th>
+                    <th className="py-2 pr-4">来源</th>
+                    <th className="py-2">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {rulesLoading ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="py-6 text-center text-xs text-zinc-400"
+                      >
+                        加载中…
+                      </td>
+                    </tr>
+                  ) : rules.length > 0 ? (
+                    rules.map((rule) => (
+                      <tr key={rule.id} className="align-top">
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              rule.type === "expense"
+                                ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400"
+                                : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+                            }`}
+                          >
+                            {rule.type === "expense" ? "支出" : "收入"}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 font-medium">
+                          {rule.merchantName}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                            {rule.category}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-[10px] text-zinc-400">
+                          {rule.source === "manual" ? "手动" : "自动学习"}
+                        </td>
+                        <td className="py-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            disabled={deletingRuleId === rule.id}
+                            className="text-[10px] text-red-500 hover:text-red-700 disabled:text-zinc-300 dark:hover:text-red-400"
+                          >
+                            {deletingRuleId === rule.id
+                              ? "删除中…"
+                              : "删除"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="py-6 text-center text-xs text-zinc-400"
+                      >
+                        暂无分类规则。点击「从历史交易学习规则」按钮，可从已有的交易记录中自动生成规则。
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

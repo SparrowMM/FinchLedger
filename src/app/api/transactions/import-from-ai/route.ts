@@ -19,6 +19,10 @@ import { listPaymentMethodNames } from "@/lib/payment-methods-db";
 import type { BookkeepingImportChannel } from "@/lib/import-channels";
 import { resolveDefaultPaymentMethodNameForChannel } from "@/lib/import-channel-payment-db";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
+import {
+  buildCategoryRuleMap,
+  learnRulesFromTransactions,
+} from "@/lib/category-rules-db";
 import type { TransactionType } from "@prisma/client";
 
 type Channel = "alipay" | "wechat" | "cmb" | "icbc";
@@ -76,8 +80,21 @@ function isCmbLifeRepayment(t: AITransaction) {
 
 function resolveExpenseCategory(
   t: AITransaction,
-  allowedExpenseCategoryNames: string[]
+  allowedExpenseCategoryNames: string[],
+  ruleMap?: Map<string, string>
 ): string {
+  // 1. Check learned/manual rules first (merchant name exact match)
+  if (ruleMap) {
+    const merchantKey = (t.merchant ?? "").trim().toLowerCase();
+    if (merchantKey) {
+      const ruleCategory = ruleMap.get(merchantKey);
+      if (ruleCategory && allowedExpenseCategoryNames.includes(ruleCategory)) {
+        return ruleCategory;
+      }
+    }
+  }
+
+  // 2. Hardcoded regex rules
   const text = `${t.category ?? ""} ${t.merchant ?? ""} ${t.note ?? ""}`;
   if (
     /(app\s*store|apple\.com\/bill|apple\s*services|icloud|i\s*cloud|itunes)/i.test(
@@ -108,6 +125,23 @@ function resolveExpenseCategory(
     return "人情-亲人";
   }
   return normalizeExpenseCategoryFromList(t.category, allowedExpenseCategoryNames);
+}
+
+function resolveIncomeCategory(
+  t: AITransaction,
+  allowedIncomeCategoryNames: string[],
+  ruleMap?: Map<string, string>
+): string {
+  if (ruleMap) {
+    const merchantKey = (t.merchant ?? "").trim().toLowerCase();
+    if (merchantKey) {
+      const ruleCategory = ruleMap.get(merchantKey);
+      if (ruleCategory && allowedIncomeCategoryNames.includes(ruleCategory)) {
+        return ruleCategory;
+      }
+    }
+  }
+  return normalizeIncomeCategoryFromList(t.category, allowedIncomeCategoryNames);
 }
 
 export async function POST(req: Request) {
@@ -147,9 +181,14 @@ export async function POST(req: Request) {
 
   try {
     const metaLoadStart = nowMs();
-    const categoryNames = await listExpenseCategoryNames().catch(() => []);
-    const incomeCategoryNames = await listIncomeCategoryNames().catch(() => []);
-    const paymentMethodNames = await listPaymentMethodNames().catch(() => []);
+    const [categoryNames, incomeCategoryNames, paymentMethodNames, expenseRuleMap, incomeRuleMap] =
+      await Promise.all([
+        listExpenseCategoryNames().catch(() => []),
+        listIncomeCategoryNames().catch(() => []),
+        listPaymentMethodNames().catch(() => []),
+        buildCategoryRuleMap("expense").catch(() => new Map<string, string>()),
+        buildCategoryRuleMap("income").catch(() => new Map<string, string>()),
+      ]);
     const metaLoadElapsedMs = nowMs() - metaLoadStart;
     const allowedExpenseCategoryNames =
       categoryNames.length > 0
@@ -232,11 +271,8 @@ export async function POST(req: Request) {
           amount: t.normalizedAmount,
           category:
             prismaType === "expense"
-              ? resolveExpenseCategory(t, allowedExpenseCategoryNames)
-              : normalizeIncomeCategoryFromList(
-                  t.category,
-                  allowedIncomeCategoryNames
-                ),
+              ? resolveExpenseCategory(t, allowedExpenseCategoryNames, expenseRuleMap)
+              : resolveIncomeCategory(t, allowedIncomeCategoryNames, incomeRuleMap),
           account: normalizePaymentMethodFromList(
             rawAccount,
             allowedPaymentMethods
@@ -259,6 +295,22 @@ export async function POST(req: Request) {
     });
     const writeDbElapsedMs = nowMs() - writeDbStart;
 
+    // Auto-learn category rules from imported transactions
+    const learnStart = nowMs();
+    let rulesLearned = 0;
+    try {
+      rulesLearned = await learnRulesFromTransactions(
+        data.map((d) => ({
+          type: d.type as TransactionType,
+          merchantName: d.name,
+          category: d.category,
+        }))
+      );
+    } catch (e) {
+      console.warn("[TRANSACTIONS-IMPORT] Rule learning failed (non-fatal)", e);
+    }
+    const learnElapsedMs = nowMs() - learnStart;
+
     console.log("[TRANSACTIONS-IMPORT] Import completed", {
       requestId,
       channel,
@@ -266,14 +318,17 @@ export async function POST(req: Request) {
       normalizedTransactionsCount: normalizedTransactions.length,
       toInsertCount: data.length,
       insertedCount: result.count,
+      rulesLearned,
       metaLoadElapsedMs: Number(metaLoadElapsedMs.toFixed(2)),
       buildDataElapsedMs: Number(buildDataElapsedMs.toFixed(2)),
       writeDbElapsedMs: Number(writeDbElapsedMs.toFixed(2)),
+      learnElapsedMs: Number(learnElapsedMs.toFixed(2)),
       totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
     });
 
     return NextResponse.json({
       insertedCount: result.count,
+      rulesLearned,
     });
   } catch (e) {
     console.error("[TRANSACTIONS-IMPORT] Import from AI failed", {

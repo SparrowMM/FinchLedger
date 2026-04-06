@@ -153,6 +153,12 @@ type CategoryMeta = {
   icon: string;
 };
 
+type CategoryRuleItem = {
+  type: "expense" | "income";
+  merchantName: string;
+  category: string;
+};
+
 export default function AIBookkeepingPage() {
   const [channel, setChannel] = useState<"alipay" | "wechat" | "cmb" | "icbc">(
     "alipay"
@@ -177,6 +183,10 @@ export default function AIBookkeepingPage() {
   const [importPaymentDefaults, setImportPaymentDefaults] = useState<
     Record<string, string>
   >({});
+  const [categoryRules, setCategoryRules] = useState<CategoryRuleItem[]>([]);
+  const [ruleMatchedIndices, setRuleMatchedIndices] = useState<Set<number>>(
+    new Set()
+  );
 
   const paymentMethodMetaMap = useMemo(
     () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
@@ -193,6 +203,26 @@ export default function AIBookkeepingPage() {
       importPaymentDefaults[channel] ?? IMPORT_CHANNEL_DEFAULT_FALLBACK[channel]
     );
   }, [importPaymentDefaults, channel]);
+
+  const expenseRuleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of categoryRules) {
+      if (r.type === "expense") {
+        map.set(r.merchantName.toLowerCase(), r.category);
+      }
+    }
+    return map;
+  }, [categoryRules]);
+
+  const incomeRuleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of categoryRules) {
+      if (r.type === "income") {
+        map.set(r.merchantName.toLowerCase(), r.category);
+      }
+    }
+    return map;
+  }, [categoryRules]);
 
   const fileAccept =
     channel === "alipay"
@@ -284,6 +314,32 @@ export default function AIBookkeepingPage() {
       }
     }
     void loadImportDefaults();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCategoryRules() {
+      try {
+        const res = await fetch("/api/category-rules");
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.rules) return;
+        if (!cancelled) {
+          setCategoryRules(
+            (json.rules as CategoryRuleItem[]).map((r) => ({
+              type: r.type,
+              merchantName: r.merchantName,
+              category: r.category,
+            }))
+          );
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void loadCategoryRules();
     return () => {
       cancelled = true;
     };
@@ -486,8 +542,13 @@ export default function AIBookkeepingPage() {
               "招商银行",
               "工商银行",
             ];
-      setDraftTransactions(
-        (parsedResult.transactions ?? []).map((t) => ({
+
+      const allowedExpenseNames = expenseCategories.map((c) => c.name);
+      const allowedIncomeNames = incomeCategories.map((c) => c.name);
+      const matched = new Set<number>();
+
+      const drafts = (parsedResult.transactions ?? []).map((t, idx) => {
+        const coerced = {
           ...t,
           method: coercePaymentMethodAfterAiParse(
             channel,
@@ -495,8 +556,24 @@ export default function AIBookkeepingPage() {
             namesForCoerce,
             importDefaultForCurrentChannel
           ),
-        }))
-      );
+        };
+
+        const merchantKey = (t.merchant ?? "").trim().toLowerCase();
+        if (merchantKey && (t.category === "待确认" || !t.category)) {
+          const ruleMap = t.type === "income" ? incomeRuleMap : expenseRuleMap;
+          const allowed = t.type === "income" ? allowedIncomeNames : allowedExpenseNames;
+          const ruleCategory = ruleMap.get(merchantKey);
+          if (ruleCategory && allowed.includes(ruleCategory)) {
+            coerced.category = ruleCategory;
+            matched.add(idx);
+          }
+        }
+
+        return coerced;
+      });
+
+      setRuleMatchedIndices(matched);
+      setDraftTransactions(drafts);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "AI 解析失败，请稍后重试。"
@@ -533,7 +610,12 @@ export default function AIBookkeepingPage() {
       }
 
       const count = data?.insertedCount ?? draftTransactions.length;
-      setSaveMessage(`已将 ${count} 条交易保存到记账系统。`);
+      const rulesLearned = data?.rulesLearned ?? 0;
+      const ruleMsg =
+        rulesLearned > 0
+          ? `同时学习了 ${rulesLearned} 条分类规则，下次导入时将自动应用。`
+          : "";
+      setSaveMessage(`已将 ${count} 条交易保存到记账系统。${ruleMsg}`);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "保存到记账系统失败，请稍后重试。"
@@ -694,6 +776,30 @@ export default function AIBookkeepingPage() {
             </div>
           </div>
 
+          {(() => {
+            const pendingCount = draftTransactions.filter(
+              (t) => t.category === "待确认"
+            ).length;
+            const ruleCount = ruleMatchedIndices.size;
+            if (ruleCount === 0 && pendingCount === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl bg-zinc-50 px-3 py-2 text-[11px] dark:bg-zinc-900">
+                {ruleCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
+                    {ruleCount} 条由历史规则自动分类
+                  </span>
+                )}
+                {pendingCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    {pendingCount} 条仍需手动确认分类
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
           {result.transactions?.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-xs">
@@ -779,28 +885,44 @@ export default function AIBookkeepingPage() {
                         </span>
                       </td>
                       <td className="py-2 pr-4">
-                        <select
-                          value={t.category}
-                          onChange={(e) =>
-                            handleDraftCategoryChange(index, e.target.value)
-                          }
-                          className="min-w-24 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-zinc-500"
-                        >
-                          {(t.type === "expense"
-                            ? expenseCategories
-                            : incomeCategories
-                          ).map((cat) => (
-                            <option key={cat.id} value={cat.name}>
-                              {cat.name}
-                            </option>
-                          ))}
-                          {(t.type === "expense"
-                            ? expenseCategories
-                            : incomeCategories
-                          ).some((cat) => cat.name === t.category) ? null : (
-                            <option value={t.category}>{t.category}</option>
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={t.category}
+                            onChange={(e) =>
+                              handleDraftCategoryChange(index, e.target.value)
+                            }
+                            className={`min-w-24 rounded-md border px-2 py-1 text-[11px] outline-none focus:border-zinc-400 dark:focus:border-zinc-500 ${
+                              t.category === "待确认"
+                                ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
+                                : ruleMatchedIndices.has(index)
+                                ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/40"
+                                : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+                            }`}
+                          >
+                            {(t.type === "expense"
+                              ? expenseCategories
+                              : incomeCategories
+                            ).map((cat) => (
+                              <option key={cat.id} value={cat.name}>
+                                {cat.name}
+                              </option>
+                            ))}
+                            {(t.type === "expense"
+                              ? expenseCategories
+                              : incomeCategories
+                            ).some((cat) => cat.name === t.category) ? null : (
+                              <option value={t.category}>{t.category}</option>
+                            )}
+                          </select>
+                          {ruleMatchedIndices.has(index) && (
+                            <span
+                              className="shrink-0 text-[10px] text-blue-500 dark:text-blue-400"
+                              title="由历史分类规则自动匹配"
+                            >
+                              规则
+                            </span>
                           )}
-                        </select>
+                        </div>
                       </td>
                       <td className="py-2 pr-4">
                         <div>{t.merchant || "—"}</div>

@@ -77,6 +77,19 @@ model AiPrompt {
   createdAt DateTime @default(now())
 }
 
+// 分类规则：记录商户名 → 类目的映射，用于 AI 导入时自动分类，避免反复手动确认。
+model CategoryRule {
+  id           String          @id @default(uuid())
+  type         TransactionType
+  merchantName String          // 要匹配的商户名（精确匹配，大小写不敏感）
+  category     String          // 目标分类名
+  source       String          @default("learned") // "learned"（从历史学习）或 "manual"（手动创建）
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([type, merchantName])
+}
+
 enum TransactionType {
   income
   expense
