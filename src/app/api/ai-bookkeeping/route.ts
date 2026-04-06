@@ -325,7 +325,6 @@ export async function POST(req: Request) {
         {
           error:
             "百炼返回的不是合法 JSON，请稍后重试或调整提示词。",
-          raw: content,
         },
         { status: 500 }
       );

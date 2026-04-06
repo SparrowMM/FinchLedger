@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { getDefaultMonthParam } from "@/lib/shared-types";
 
 type DeleteScope = "all-expense" | "all-income" | "month";
 
@@ -15,14 +16,6 @@ type DeleteResult = {
   scope: DeleteScope;
   month?: string;
 };
-
-function getDefaultMonthParam() {
-  const now = new Date();
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = prevMonthDate.getFullYear();
-  const month = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
 
 function getActionLabel(scope: DeleteScope, month?: string) {
   if (scope === "all-expense") return "清空全部支出流水";

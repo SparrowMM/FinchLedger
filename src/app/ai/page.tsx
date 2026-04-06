@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
+import { parseSseStream } from "@/lib/sse-stream";
 
 const IMPORT_CHANNEL_DEFAULT_FALLBACK: Record<
   "alipay" | "wechat" | "cmb" | "icbc",
@@ -150,14 +151,6 @@ type CategoryMeta = {
   name: string;
   color: string;
   icon: string;
-};
-
-type StreamChunk = {
-  choices?: Array<{
-    delta?: { content?: string };
-    message?: { content?: string };
-    text?: string;
-  }>;
 };
 
 export default function AIBookkeepingPage() {
@@ -468,44 +461,9 @@ export default function AIBookkeepingPage() {
         throw new Error("AI 接口返回为空，请稍后重试。");
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-
-      let buffer = "";
-      let fullContent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
-
-        for (const event of events) {
-          const line = event.trim();
-          if (!line.startsWith("data:")) continue;
-          const dataStr = line.slice(5).trim();
-          if (!dataStr || dataStr === "[DONE]") {
-            continue;
-          }
-          let parsed: StreamChunk;
-          try {
-            parsed = JSON.parse(dataStr);
-          } catch {
-            continue;
-          }
-          const delta = parsed.choices?.[0]?.delta?.content ??
-            parsed.choices?.[0]?.message?.content ??
-            parsed.choices?.[0]?.text ??
-            "";
-          if (typeof delta === "string" && delta) {
-            fullContent += delta;
-            setAiRaw(fullContent);
-          }
-        }
-      }
+      const fullContent = await parseSseStream(res.body, (text) => {
+        setAiRaw(text);
+      });
 
       if (!fullContent.trim()) {
         throw new Error("AI 返回内容为空，请稍后重试。");

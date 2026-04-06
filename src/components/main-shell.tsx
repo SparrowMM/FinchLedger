@@ -11,7 +11,7 @@ const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/expenses", label: "支出流水" },
   { href: "/income", label: "收入流水" },
-  { href: "/categories", label: "支出分类管理" },
+  { href: "/categories", label: "配置管理" },
   { href: "/admin", label: "管理员" },
   { href: "/prompts", label: "AI 提示词" },
   { href: "/ai", label: "AI 自动记账" },
@@ -47,6 +47,7 @@ export function MainShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={active ? "page" : undefined}
                   className={`rounded-full px-3 py-1 transition-colors ${
                     active
                       ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"

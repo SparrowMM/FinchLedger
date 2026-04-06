@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDateTimeInChina } from "@/lib/china-time";
+import {
+  type ApiTransactionsResponse,
+  type CategoryMeta,
+  getDefaultMonthParam,
+  hexToRgba,
+} from "@/lib/shared-types";
 
 type Income = {
   id: string;
@@ -15,59 +21,6 @@ type Income = {
   note?: string;
 };
 
-type ApiTransaction = {
-  id: string;
-  date: string;
-  name: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  account: string;
-  note?: string | null;
-};
-
-type ApiResponse = {
-  transactions: ApiTransaction[];
-  summary: {
-    income: number;
-    expense: number;
-    balance: number;
-  };
-};
-
-type PaymentMethodMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
-type IncomeCategoryMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
-function getDefaultMonthParam() {
-  const now = new Date();
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = prevMonthDate.getFullYear();
-  const month = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
-function hexToRgba(hex: string, alpha: number) {
-  const cleaned = hex.replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) {
-    return `rgba(113,113,122,${alpha})`;
-  }
-  const r = Number.parseInt(cleaned.slice(0, 2), 16);
-  const g = Number.parseInt(cleaned.slice(2, 4), 16);
-  const b = Number.parseInt(cleaned.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export default function IncomePage() {
   const [month, setMonth] = useState<string>(getDefaultMonthParam());
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -79,9 +32,9 @@ export default function IncomePage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [incomeCategoryMetas, setIncomeCategoryMetas] = useState<
-    IncomeCategoryMeta[]
+    CategoryMeta[]
   >([]);
-  const [paymentMethodMetas, setPaymentMethodMetas] = useState<PaymentMethodMeta[]>(
+  const [paymentMethodMetas, setPaymentMethodMetas] = useState<CategoryMeta[]>(
     []
   );
 
@@ -101,7 +54,7 @@ export default function IncomePage() {
         if (!res.ok) {
           throw new Error("加载收入数据失败");
         }
-        const data: ApiResponse = await res.json();
+        const data: ApiTransactionsResponse = await res.json();
 
         if (cancelled) return;
 
@@ -150,7 +103,7 @@ export default function IncomePage() {
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.categories) return;
         if (!cancelled) {
-          setIncomeCategoryMetas(json.categories as IncomeCategoryMeta[]);
+          setIncomeCategoryMetas(json.categories as CategoryMeta[]);
         }
       } catch {
         // ignore category meta load errors on list page
@@ -170,7 +123,7 @@ export default function IncomePage() {
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.methods) return;
         if (!cancelled) {
-          setPaymentMethodMetas(json.methods as PaymentMethodMeta[]);
+          setPaymentMethodMetas(json.methods as CategoryMeta[]);
         }
       } catch {
         // ignore payment method meta load errors on list page
@@ -182,11 +135,13 @@ export default function IncomePage() {
     };
   }, []);
 
-  const paymentMethodMetaMap = new Map(
-    paymentMethodMetas.map((item) => [item.name, item] as const)
+  const paymentMethodMetaMap = useMemo(
+    () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
+    [paymentMethodMetas]
   );
-  const incomeCategoryMetaMap = new Map(
-    incomeCategoryMetas.map((item) => [item.name, item] as const)
+  const incomeCategoryMetaMap = useMemo(
+    () => new Map(incomeCategoryMetas.map((item) => [item.name, item] as const)),
+    [incomeCategoryMetas]
   );
   const categoryOptions = Array.from(
     new Set(incomes.map((item) => item.category))

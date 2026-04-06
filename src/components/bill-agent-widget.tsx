@@ -2,18 +2,11 @@
 
 import { ChatBubbleIcon, Cross2Icon } from "@radix-ui/react-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { parseSseStream } from "@/lib/sse-stream";
 
 type Role = "user" | "assistant";
 
 type ChatTurn = { role: Role; content: string };
-
-type StreamChunk = {
-  choices?: Array<{
-    delta?: { content?: string };
-    message?: { content?: string };
-    text?: string;
-  }>;
-};
 
 export function BillAgentWidget() {
   const [open, setOpen] = useState(false);
@@ -36,44 +29,15 @@ export function BillAgentWidget() {
     el.scrollTop = el.scrollHeight;
   }, [messages, open, streaming]);
 
-  const parseSseStream = useCallback(
-    async (body: ReadableStream<Uint8Array>, onDelta: (t: string) => void) => {
-      const reader = body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-      let full = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() || "";
-        for (const event of events) {
-          const line = event.trim();
-          if (!line.startsWith("data:")) continue;
-          const dataStr = line.slice(5).trim();
-          if (!dataStr || dataStr === "[DONE]") continue;
-          let parsed: StreamChunk;
-          try {
-            parsed = JSON.parse(dataStr);
-          } catch {
-            continue;
-          }
-          const delta =
-            parsed.choices?.[0]?.delta?.content ??
-            parsed.choices?.[0]?.message?.content ??
-            parsed.choices?.[0]?.text ??
-            "";
-          if (typeof delta === "string" && delta) {
-            full += delta;
-            onDelta(full);
-          }
-        }
-      }
-      return full;
-    },
-    []
-  );
+  // Esc 关闭对话面板
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -121,7 +85,7 @@ export function BillAgentWidget() {
     } finally {
       setStreaming(false);
     }
-  }, [input, messages, streaming, parseSseStream]);
+  }, [input, messages, streaming]);
 
   const clearChat = useCallback(() => {
     if (streaming) return;
@@ -154,6 +118,7 @@ export function BillAgentWidget() {
           className="fixed bottom-[5.25rem] right-5 z-[100] flex max-h-[min(70vh,560px)] w-[min(calc(100vw-2.5rem),420px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
           role="dialog"
           aria-label="账单助手对话"
+          aria-modal="true"
         >
           <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <div>
@@ -199,7 +164,7 @@ export function BillAgentWidget() {
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
                     m.role === "user"
                       ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
                       : "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"

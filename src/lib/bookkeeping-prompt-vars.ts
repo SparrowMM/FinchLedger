@@ -16,9 +16,18 @@ import {
 export async function getBookkeepingPromptVarsForChannel(
   channel: BookkeepingImportChannel
 ): Promise<BookkeepingPromptVars> {
-  const categoryNames = await listExpenseCategoryNames().catch(() => []);
-  const incomeCategoryNames = await listIncomeCategoryNames().catch(() => []);
-  const paymentMethodNames = await listPaymentMethodNames().catch(() => []);
+  const categoryNames = await listExpenseCategoryNames().catch((e) => {
+    console.warn("[bookkeeping-prompt-vars] 读取支出类目失败，使用默认列表", e);
+    return [] as string[];
+  });
+  const incomeCategoryNames = await listIncomeCategoryNames().catch((e) => {
+    console.warn("[bookkeeping-prompt-vars] 读取收入类目失败，使用默认列表", e);
+    return [] as string[];
+  });
+  const paymentMethodNames = await listPaymentMethodNames().catch((e) => {
+    console.warn("[bookkeeping-prompt-vars] 读取支付方式失败，使用默认列表", e);
+    return [] as string[];
+  });
   const allowedExpenseCategories =
     categoryNames.length > 0
       ? categoryNames

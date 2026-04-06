@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDateTimeInChina } from "@/lib/china-time";
+import {
+  type ApiTransactionsResponse,
+  type CategoryMeta,
+  getDefaultMonthParam,
+  hexToRgba,
+} from "@/lib/shared-types";
 
 type Expense = {
   id: string;
@@ -15,59 +21,6 @@ type Expense = {
   note?: string;
 };
 
-type ApiTransaction = {
-  id: string;
-  date: string;
-  name: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  account: string;
-  note?: string | null;
-};
-
-type ApiResponse = {
-  transactions: ApiTransaction[];
-  summary: {
-    income: number;
-    expense: number;
-    balance: number;
-  };
-};
-
-type ExpenseCategoryMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
-type PaymentMethodMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
-function getDefaultMonthParam() {
-  const now = new Date();
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const year = prevMonthDate.getFullYear();
-  const month = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
-function hexToRgba(hex: string, alpha: number) {
-  const cleaned = hex.replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) {
-    return `rgba(113,113,122,${alpha})`;
-  }
-  const r = Number.parseInt(cleaned.slice(0, 2), 16);
-  const g = Number.parseInt(cleaned.slice(2, 4), 16);
-  const b = Number.parseInt(cleaned.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 export default function ExpensesPage() {
   const [month, setMonth] = useState<string>(getDefaultMonthParam());
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -78,8 +31,8 @@ export default function ExpensesPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [categoryMetas, setCategoryMetas] = useState<ExpenseCategoryMeta[]>([]);
-  const [paymentMethodMetas, setPaymentMethodMetas] = useState<PaymentMethodMeta[]>(
+  const [categoryMetas, setCategoryMetas] = useState<CategoryMeta[]>([]);
+  const [paymentMethodMetas, setPaymentMethodMetas] = useState<CategoryMeta[]>(
     []
   );
 
@@ -99,7 +52,7 @@ export default function ExpensesPage() {
         if (!res.ok) {
           throw new Error("加载支出数据失败");
         }
-        const data: ApiResponse = await res.json();
+        const data: ApiTransactionsResponse = await res.json();
 
         if (cancelled) return;
 
@@ -148,7 +101,7 @@ export default function ExpensesPage() {
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.categories) return;
         if (!cancelled) {
-          setCategoryMetas(json.categories as ExpenseCategoryMeta[]);
+          setCategoryMetas(json.categories as CategoryMeta[]);
         }
       } catch {
         // ignore category meta load errors on list page
@@ -168,7 +121,7 @@ export default function ExpensesPage() {
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.methods) return;
         if (!cancelled) {
-          setPaymentMethodMetas(json.methods as PaymentMethodMeta[]);
+          setPaymentMethodMetas(json.methods as CategoryMeta[]);
         }
       } catch {
         // ignore payment method meta load errors on list page
@@ -180,11 +133,13 @@ export default function ExpensesPage() {
     };
   }, []);
 
-  const categoryMetaMap = new Map(
-    categoryMetas.map((item) => [item.name, item] as const)
+  const categoryMetaMap = useMemo(
+    () => new Map(categoryMetas.map((item) => [item.name, item] as const)),
+    [categoryMetas]
   );
-  const paymentMethodMetaMap = new Map(
-    paymentMethodMetas.map((item) => [item.name, item] as const)
+  const paymentMethodMetaMap = useMemo(
+    () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
+    [paymentMethodMetas]
   );
 
   const categoryOptions = Array.from(

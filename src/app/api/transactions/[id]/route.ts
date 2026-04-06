@@ -30,7 +30,7 @@ export async function DELETE(_req: Request, context: RouteContext) {
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[TRANSACTIONS] Delete failed", e);
     return NextResponse.json(

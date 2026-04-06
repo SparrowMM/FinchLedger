@@ -15,26 +15,12 @@ import {
   YAxis,
 } from "recharts";
 import { formatDateTimeInChina } from "@/lib/china-time";
-
-type ApiTransaction = {
-  id: string;
-  date: string;
-  name: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  account: string;
-  note?: string | null;
-};
-
-type ApiResponse = {
-  transactions: ApiTransaction[];
-  summary: {
-    income: number;
-    expense: number;
-    balance: number;
-  };
-};
+import {
+  type ApiTransaction,
+  type ApiTransactionsResponse,
+  type CategoryMeta,
+  getDefaultMonthParam,
+} from "@/lib/shared-types";
 
 type AiTransaction = {
   type: "income" | "expense";
@@ -78,19 +64,9 @@ type MonthlyTrendItem = {
   expense: number;
 };
 
-type ApiExpenseCategory = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
+type ApiExpenseCategory = CategoryMeta;
 
-type ApiPaymentMethod = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
+type ApiPaymentMethod = CategoryMeta;
 
 const CATEGORY_COLORS: string[] = [
   "#0ea5e9", // sky-500
@@ -102,20 +78,11 @@ const CATEGORY_COLORS: string[] = [
   "#64748b", // slate-500
 ];
 
-function getCurrentMonthParam() {
-  const now = new Date();
-  // 默认展示上一个自然月
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const y = prevMonthDate.getFullYear();
-  const m = String(prevMonthDate.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
 export default function Home() {
-  const [month, setMonth] = useState<string>(getCurrentMonthParam());
+  const [month, setMonth] = useState<string>(getDefaultMonthParam());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<ApiResponse | null>(null);
+  const [data, setData] = useState<ApiTransactionsResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
@@ -142,7 +109,7 @@ export default function Home() {
         if (!res.ok) {
           throw new Error("加载交易数据失败");
         }
-        const json: ApiResponse = await res.json();
+        const json: ApiTransactionsResponse = await res.json();
         if (cancelled) return;
         setData(json);
       } catch (e) {

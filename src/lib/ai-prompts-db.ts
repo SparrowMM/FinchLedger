@@ -29,7 +29,8 @@ export async function resolveBookkeepingSystemPrompt(
   if (d) {
     try {
       row = await d.findUnique({ where: { key: AI_PROMPT_KEY_BOOKKEEPING } });
-    } catch {
+    } catch (e) {
+      console.warn("[ai-prompts-db] 读取记账提示词失败，将使用默认模板", e);
       row = null;
     }
   }
@@ -55,7 +56,8 @@ export async function resolveExpenseAnalysisSystemPrompt(): Promise<string> {
   if (d) {
     try {
       row = await d.findUnique({ where: { key: AI_PROMPT_KEY_EXPENSE_ANALYSIS } });
-    } catch {
+    } catch (e) {
+      console.warn("[ai-prompts-db] 读取分析提示词失败，将使用默认模板", e);
       row = null;
     }
   }

@@ -43,7 +43,7 @@ export async function DELETE(req: Request) {
         where: { type: TransactionType.expense },
       });
       return NextResponse.json({
-        success: true,
+        ok: true,
         deletedCount: result.count,
         scope,
       });
@@ -54,7 +54,7 @@ export async function DELETE(req: Request) {
         where: { type: TransactionType.income },
       });
       return NextResponse.json({
-        success: true,
+        ok: true,
         deletedCount: result.count,
         scope,
       });
@@ -86,7 +86,7 @@ export async function DELETE(req: Request) {
       });
 
       return NextResponse.json({
-        success: true,
+        ok: true,
         deletedCount: result.count,
         scope,
         month,
