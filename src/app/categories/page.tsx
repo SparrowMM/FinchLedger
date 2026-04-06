@@ -547,7 +547,7 @@ export default function CategoriesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          配置管理
+          分类配置
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           统一管理支出分类、收入分类和支付方式，支持扩展、删除，并配置颜色和图标。

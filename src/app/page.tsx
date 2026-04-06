@@ -357,7 +357,7 @@ export default function Home() {
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            总览 Dashboard
+            总览
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             快速查看所选月份的收入、支出与结余，以及分类分布和按月趋势，所有数据均来自数据库中的真实交易记录。

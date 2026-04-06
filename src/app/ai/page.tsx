@@ -636,7 +636,7 @@ export default function AIBookkeepingPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          AI 流水导入解析
+          AI 流水导入
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           将从「支付宝、微信支付、招商银行、工商银行」导出的流水粘贴在下面，由 AI 统一解析成标准化的交易记录，方便导入记账系统。

@@ -8,13 +8,13 @@ import React from "react";
 import { BillAgentWidget } from "./bill-agent-widget";
 
 const navItems = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "总览" },
   { href: "/expenses", label: "支出流水" },
   { href: "/income", label: "收入流水" },
-  { href: "/categories", label: "配置管理" },
-  { href: "/admin", label: "管理员" },
+  { href: "/categories", label: "分类配置" },
+  { href: "/admin", label: "数据管理" },
   { href: "/prompts", label: "AI 提示词" },
-  { href: "/ai", label: "AI 自动记账" },
+  { href: "/ai", label: "AI 流水导入" },
 ];
 
 export function MainShell({ children }: { children: React.ReactNode }) {

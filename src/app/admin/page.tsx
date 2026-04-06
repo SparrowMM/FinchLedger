@@ -96,7 +96,7 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          管理员操作
+          数据管理
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           AI 系统提示词请在{" "}
