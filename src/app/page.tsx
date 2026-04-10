@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useApiFetch } from "@/hooks/useApiFetch";
 import {
   CartesianGrid,
   Legend,
@@ -87,10 +88,12 @@ export default function Home() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null);
   const [aiCreatedAt, setAiCreatedAt] = useState<string | null>(null);
-  const [expenseCategories, setExpenseCategories] = useState<ApiExpenseCategory[]>(
-    []
-  );
-  const [paymentMethods, setPaymentMethods] = useState<ApiPaymentMethod[]>([]);
+
+  const expCatData = useApiFetch<{ categories: ApiExpenseCategory[] }>("/api/expense-categories");
+  const expenseCategories = useMemo(() => expCatData?.categories ?? [], [expCatData]);
+
+  const pmData = useApiFetch<{ methods: ApiPaymentMethod[] }>("/api/payment-methods");
+  const paymentMethods = useMemo(() => pmData?.methods ?? [], [pmData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,46 +134,6 @@ export default function Home() {
       cancelled = true;
     };
   }, [month]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadCategories() {
-      try {
-        const res = await fetch("/api/expense-categories");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.categories) return;
-        if (!cancelled) {
-          setExpenseCategories(json.categories as ApiExpenseCategory[]);
-        }
-      } catch {
-        // ignore category meta load errors in dashboard
-      }
-    }
-    loadCategories();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadPaymentMethods() {
-      try {
-        const res = await fetch("/api/payment-methods");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.methods) return;
-        if (!cancelled) {
-          setPaymentMethods(json.methods as ApiPaymentMethod[]);
-        }
-      } catch {
-        // ignore payment method meta load errors in dashboard
-      }
-    }
-    loadPaymentMethods();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const expenseCategoryColorMap = useMemo(() => {
     const map = new Map<string, string>();

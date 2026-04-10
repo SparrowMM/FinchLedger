@@ -23,6 +23,7 @@ import {
   buildCategoryRuleMap,
   learnRulesFromTransactions,
 } from "@/lib/category-rules-db";
+import { UNNAMED_TRANSACTION } from "@/lib/shared-types";
 import type { TransactionType } from "@prisma/client";
 
 type Channel = "alipay" | "wechat" | "cmb" | "icbc";
@@ -236,7 +237,7 @@ export async function POST(req: Request) {
         const name =
           (t.merchant && t.merchant.trim()) ||
           (t.category && t.category.trim()) ||
-          "未命名交易";
+          UNNAMED_TRANSACTION;
 
         const rawMethodHint = (t.method && t.method.trim()) || "";
 

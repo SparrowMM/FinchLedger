@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { learnRulesFromTransactions } from "@/lib/category-rules-db";
 import { EXPENSE_FALLBACK_CATEGORY } from "@/lib/expense-categories";
 import { INCOME_FALLBACK_CATEGORY } from "@/lib/income-categories";
+import { UNNAMED_TRANSACTION } from "@/lib/shared-types";
 import type { TransactionType } from "@prisma/client";
 
 /**
@@ -21,7 +22,7 @@ export async function POST() {
         category: {
           notIn: [EXPENSE_FALLBACK_CATEGORY, INCOME_FALLBACK_CATEGORY],
         },
-        name: { not: "未命名交易" },
+        name: { not: UNNAMED_TRANSACTION },
       },
       select: { type: true, name: true, category: true },
     });

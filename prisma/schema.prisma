@@ -22,6 +22,9 @@ model Transaction {
   account   String
   note      String?
   createdAt DateTime         @default(now())
+
+  @@index([date, type])
+  @@index([type, category])
 }
 
 model MonthlyExpenseAnalysis {

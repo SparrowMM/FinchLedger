@@ -1,3 +1,6 @@
+/** 无法识别商户/来源时使用的占位名称 */
+export const UNNAMED_TRANSACTION = "未命名交易" as const;
+
 /** 与 /api/transactions 响应体对应的客户端类型 */
 export type ApiTransaction = {
   id: string;

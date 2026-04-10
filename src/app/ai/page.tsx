@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
 import { parseSseStream } from "@/lib/sse-stream";
+import { type CategoryMeta } from "@/lib/shared-types";
+import { useApiFetch } from "@/hooks/useApiFetch";
 
 const IMPORT_CHANNEL_DEFAULT_FALLBACK: Record<
   "alipay" | "wechat" | "cmb" | "icbc",
@@ -139,20 +141,6 @@ type AIParseResult = {
   summary?: string;
 };
 
-type PaymentMethodMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
-type CategoryMeta = {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-};
-
 type CategoryRuleItem = {
   type: "expense" | "income";
   merchantName: string;
@@ -175,12 +163,15 @@ export default function AIBookkeepingPage() {
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<"date" | "amount" | "category">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [showPreview, setShowPreview] = useState(false);
-  const [paymentMethodMetas, setPaymentMethodMetas] = useState<PaymentMethodMeta[]>(
-    []
-  );
-  const [expenseCategories, setExpenseCategories] = useState<CategoryMeta[]>([]);
-  const [incomeCategories, setIncomeCategories] = useState<CategoryMeta[]>([]);
+
+  const pmData = useApiFetch<{ methods: CategoryMeta[] }>("/api/payment-methods");
+  const paymentMethodMetas = useMemo(() => pmData?.methods ?? [], [pmData]);
+
+  const expCatData = useApiFetch<{ categories: CategoryMeta[] }>("/api/expense-categories");
+  const expenseCategories = useMemo(() => expCatData?.categories ?? [], [expCatData]);
+
+  const incCatData = useApiFetch<{ categories: CategoryMeta[] }>("/api/income-categories");
+  const incomeCategories = useMemo(() => incCatData?.categories ?? [], [incCatData]);
   const [importPaymentDefaults, setImportPaymentDefaults] = useState<
     Record<string, string>
   >({});
@@ -273,26 +264,6 @@ export default function AIBookkeepingPage() {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadPaymentMethodMetas() {
-      try {
-        const res = await fetch("/api/payment-methods");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.methods) return;
-        if (!cancelled) {
-          setPaymentMethodMetas(json.methods as PaymentMethodMeta[]);
-        }
-      } catch {
-        // ignore payment method meta load errors on AI page
-      }
-    }
-    loadPaymentMethodMetas();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
     async function loadImportDefaults() {
       try {
         const res = await fetch("/api/import-channel-payments");
@@ -341,39 +312,6 @@ export default function AIBookkeepingPage() {
       }
     }
     void loadCategoryRules();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadExpenseCategories() {
-      try {
-        const res = await fetch("/api/expense-categories");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.categories) return;
-        if (!cancelled) {
-          setExpenseCategories(json.categories as CategoryMeta[]);
-        }
-      } catch {
-        // ignore category meta load errors on AI page
-      }
-    }
-    async function loadIncomeCategories() {
-      try {
-        const res = await fetch("/api/income-categories");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.categories) return;
-        if (!cancelled) {
-          setIncomeCategories(json.categories as CategoryMeta[]);
-        }
-      } catch {
-        // ignore category meta load errors on AI page
-      }
-    }
-    void loadExpenseCategories();
-    void loadIncomeCategories();
     return () => {
       cancelled = true;
     };
@@ -483,7 +421,6 @@ export default function AIBookkeepingPage() {
 
     try {
       // 支付宝 CSV 按 GBK 解码，其它走 UTF-8
-      // @ts-expect-error 浏览器环境下支持传入编码参数
       reader.readAsText(file, isAlipayCsv ? "gbk" : "utf-8");
     } catch {
       reader.readAsText(file);

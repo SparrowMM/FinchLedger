@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { TransactionType } from "@prisma/client";
+import { UNNAMED_TRANSACTION } from "@/lib/shared-types";
 
 export type CategoryRuleRecord = {
   id: string;
@@ -79,7 +80,7 @@ export async function learnRulesFromTransactions(
 
   for (const item of items) {
     const name = item.merchantName.trim();
-    if (!name || name === "未命名交易") continue;
+    if (!name || name === UNNAMED_TRANSACTION) continue;
     if (fallbackCategories.includes(item.category)) continue;
 
     const key = `${item.type}::${name.toLowerCase()}`;
@@ -91,26 +92,27 @@ export async function learnRulesFromTransactions(
 
   if (!toUpsert.length) return 0;
 
-  let count = 0;
-  for (const item of toUpsert) {
-    await prisma.categoryRule.upsert({
-      where: {
-        type_merchantName: {
+  await prisma.$transaction(
+    toUpsert.map((item) =>
+      prisma.categoryRule.upsert({
+        where: {
+          type_merchantName: {
+            type: item.type,
+            merchantName: item.merchantName,
+          },
+        },
+        update: { category: item.category, updatedAt: new Date() },
+        create: {
           type: item.type,
           merchantName: item.merchantName,
+          category: item.category,
+          source: "learned",
         },
-      },
-      update: { category: item.category, updatedAt: new Date() },
-      create: {
-        type: item.type,
-        merchantName: item.merchantName,
-        category: item.category,
-        source: "learned",
-      },
-    });
-    count++;
-  }
-  return count;
+      })
+    )
+  );
+
+  return toUpsert.length;
 }
 
 export async function deleteCategoryRule(id: string) {

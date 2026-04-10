@@ -8,6 +8,7 @@ import {
   getDefaultMonthParam,
   hexToRgba,
 } from "@/lib/shared-types";
+import { useApiFetch } from "@/hooks/useApiFetch";
 
 type Expense = {
   id: string;
@@ -31,10 +32,12 @@ export default function ExpensesPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [categoryMetas, setCategoryMetas] = useState<CategoryMeta[]>([]);
-  const [paymentMethodMetas, setPaymentMethodMetas] = useState<CategoryMeta[]>(
-    []
-  );
+
+  const expCatData = useApiFetch<{ categories: CategoryMeta[] }>("/api/expense-categories");
+  const categoryMetas = useMemo(() => expCatData?.categories ?? [], [expCatData]);
+
+  const pmData = useApiFetch<{ methods: CategoryMeta[] }>("/api/payment-methods");
+  const paymentMethodMetas = useMemo(() => pmData?.methods ?? [], [pmData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,46 +96,6 @@ export default function ExpensesPage() {
     };
   }, [month]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadCategoryMetas() {
-      try {
-        const res = await fetch("/api/expense-categories");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.categories) return;
-        if (!cancelled) {
-          setCategoryMetas(json.categories as CategoryMeta[]);
-        }
-      } catch {
-        // ignore category meta load errors on list page
-      }
-    }
-    loadCategoryMetas();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadPaymentMethodMetas() {
-      try {
-        const res = await fetch("/api/payment-methods");
-        const json = await res.json().catch(() => null);
-        if (!res.ok || !json?.methods) return;
-        if (!cancelled) {
-          setPaymentMethodMetas(json.methods as CategoryMeta[]);
-        }
-      } catch {
-        // ignore payment method meta load errors on list page
-      }
-    }
-    loadPaymentMethodMetas();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const categoryMetaMap = useMemo(
     () => new Map(categoryMetas.map((item) => [item.name, item] as const)),
     [categoryMetas]
@@ -142,39 +105,48 @@ export default function ExpensesPage() {
     [paymentMethodMetas]
   );
 
-  const categoryOptions = Array.from(
-    new Set(expenses.map((item) => item.category))
-  ).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(new Set(expenses.map((item) => item.category))).sort((a, b) =>
+        a.localeCompare(b, "zh-CN")
+      ),
+    [expenses]
+  );
 
-  const filtered = expenses.filter((e) => {
-    if (month && !e.date.startsWith(month)) {
-      return false;
-    }
-    if (selectedCategory !== "all" && e.category !== selectedCategory) {
-      return false;
-    }
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      expenses.filter((e) => {
+        if (month && !e.date.startsWith(month)) return false;
+        if (selectedCategory !== "all" && e.category !== selectedCategory)
+          return false;
+        return true;
+      }),
+    [expenses, month, selectedCategory]
+  );
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortKey === "category") {
-      const categoryCompare = a.category.localeCompare(b.category, "zh-CN");
-      if (categoryCompare !== 0) {
-        return sortDirection === "asc" ? categoryCompare : -categoryCompare;
-      }
-      const aDate = new Date(`${a.date}T${a.time || "00:00"}`).getTime();
-      const bDate = new Date(`${b.date}T${b.time || "00:00"}`).getTime();
-      return bDate - aDate;
-    }
-
-    if (sortKey === "amount") {
-      return sortDirection === "asc" ? a.amount - b.amount : b.amount - a.amount;
-    }
-
-    const aDate = new Date(`${a.date}T${a.time || "00:00"}`).getTime();
-    const bDate = new Date(`${b.date}T${b.time || "00:00"}`).getTime();
-    return sortDirection === "asc" ? aDate - bDate : bDate - aDate;
-  });
+  const sorted = useMemo(
+    () =>
+      [...filtered].sort((a, b) => {
+        if (sortKey === "category") {
+          const categoryCompare = a.category.localeCompare(b.category, "zh-CN");
+          if (categoryCompare !== 0) {
+            return sortDirection === "asc" ? categoryCompare : -categoryCompare;
+          }
+          const aDate = new Date(`${a.date}T${a.time || "00:00"}`).getTime();
+          const bDate = new Date(`${b.date}T${b.time || "00:00"}`).getTime();
+          return bDate - aDate;
+        }
+        if (sortKey === "amount") {
+          return sortDirection === "asc"
+            ? a.amount - b.amount
+            : b.amount - a.amount;
+        }
+        const aDate = new Date(`${a.date}T${a.time || "00:00"}`).getTime();
+        const bDate = new Date(`${b.date}T${b.time || "00:00"}`).getTime();
+        return sortDirection === "asc" ? aDate - bDate : bDate - aDate;
+      }),
+    [filtered, sortKey, sortDirection]
+  );
 
   function handleSort(key: "date" | "amount" | "category") {
     if (sortKey === key) {
@@ -216,10 +188,13 @@ export default function ExpensesPage() {
     }
   }
 
-  const total =
-    filtered.length > 0
-      ? filtered.reduce((sum, e) => sum + e.amount, 0)
-      : totalFromApi;
+  const total = useMemo(
+    () =>
+      filtered.length > 0
+        ? filtered.reduce((sum, e) => sum + e.amount, 0)
+        : totalFromApi,
+    [filtered, totalFromApi]
+  );
 
   return (
     <div className="space-y-6">
