@@ -175,6 +175,7 @@ export default function AIBookkeepingPage() {
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<"date" | "amount" | "category">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [showPreview, setShowPreview] = useState(false);
   const [paymentMethodMetas, setPaymentMethodMetas] = useState<PaymentMethodMeta[]>(
     []
   );
