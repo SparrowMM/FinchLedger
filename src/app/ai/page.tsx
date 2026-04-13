@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  TransactionEditDialog,
+  type EditDialogInitial,
+} from "@/components/transaction-edit-dialog";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
 import { parseSseStream } from "@/lib/sse-stream";
 
@@ -26,6 +30,34 @@ type AITransaction = {
   method?: string;
   note?: string;
 };
+
+function normalizeDateForDateInput(raw: string): string {
+  const s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{4})[/.-年](\d{1,2})[/.-月]?(\d{1,2})/);
+  if (m) {
+    return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  }
+  const replaced = s.replace(/\//g, "-");
+  const d = new Date(replaced);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${mo}-${day}`;
+  }
+  return "";
+}
+
+function normalizeTimeForTimeInput(raw?: string): string {
+  if (!raw?.trim()) return "";
+  const t = raw.trim();
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  if (m) {
+    return `${m[1].padStart(2, "0")}:${m[2]}`;
+  }
+  return "";
+}
 
 function sanitizeClientRawContent(
   channel: "alipay" | "wechat" | "cmb" | "icbc",
@@ -187,6 +219,12 @@ export default function AIBookkeepingPage() {
   const [ruleMatchedIndices, setRuleMatchedIndices] = useState<Set<number>>(
     new Set()
   );
+  const [draftEditInitial, setDraftEditInitial] =
+    useState<EditDialogInitial | null>(null);
+  const [draftEditVariant, setDraftEditVariant] = useState<
+    "expense" | "income"
+  >("expense");
+  const draftEditIndexRef = useRef<number | null>(null);
 
   const paymentMethodMetaMap = useMemo(
     () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
@@ -626,12 +664,6 @@ export default function AIBookkeepingPage() {
     }
   };
 
-  function handleDraftCategoryChange(index: number, category: string) {
-    setDraftTransactions((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, category } : item))
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -757,9 +789,14 @@ export default function AIBookkeepingPage() {
 
       {result && (
         <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium">AI 生成的记账草稿</h2>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-sm font-medium">AI 生成的记账草稿</h2>
+              <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                与支出/收入列表相同，点击「编辑」在弹窗中核对或修改后再一键保存。
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
               {result.summary && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   {result.summary}
@@ -856,6 +893,7 @@ export default function AIBookkeepingPage() {
                     </th>
                     <th className="py-2 pr-4">商家 / 备注</th>
                     <th className="py-2">支付方式</th>
+                    <th className="py-2 pl-4 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -886,34 +924,17 @@ export default function AIBookkeepingPage() {
                       </td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1">
-                          <select
-                            value={t.category}
-                            onChange={(e) =>
-                              handleDraftCategoryChange(index, e.target.value)
-                            }
-                            className={`min-w-24 rounded-md border px-2 py-1 text-[11px] outline-none focus:border-zinc-400 dark:focus:border-zinc-500 ${
+                          <span
+                            className={`inline-flex min-h-[1.5rem] items-center rounded-md border px-2 py-1 text-[11px] ${
                               t.category === "待确认"
                                 ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
                                 : ruleMatchedIndices.has(index)
-                                ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/40"
-                                : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
+                                  ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/40"
+                                  : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
                             }`}
                           >
-                            {(t.type === "expense"
-                              ? expenseCategories
-                              : incomeCategories
-                            ).map((cat) => (
-                              <option key={cat.id} value={cat.name}>
-                                {cat.name}
-                              </option>
-                            ))}
-                            {(t.type === "expense"
-                              ? expenseCategories
-                              : incomeCategories
-                            ).some((cat) => cat.name === t.category) ? null : (
-                              <option value={t.category}>{t.category}</option>
-                            )}
-                          </select>
+                            {t.category}
+                          </span>
                           {ruleMatchedIndices.has(index) && (
                             <span
                               className="shrink-0 text-[10px] text-blue-500 dark:text-blue-400"
@@ -953,6 +974,29 @@ export default function AIBookkeepingPage() {
                           );
                         })()}
                       </td>
+                      <td className="py-2 pl-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            draftEditIndexRef.current = index;
+                            setDraftEditVariant(t.type);
+                            setDraftEditInitial({
+                              id: String(index),
+                              date: normalizeDateForDateInput(t.date),
+                              time: normalizeTimeForTimeInput(t.time),
+                              title: t.merchant ?? "",
+                              category: t.category,
+                              method: t.method ?? "",
+                              amount: t.amount,
+                              note: t.note ?? "",
+                              currency: t.currency ?? "CNY",
+                            });
+                          }}
+                          className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                        >
+                          编辑
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -965,6 +1009,43 @@ export default function AIBookkeepingPage() {
           )}
         </div>
       )}
+
+      <TransactionEditDialog
+        open={draftEditInitial !== null}
+        draftMode
+        variant={draftEditVariant}
+        categoryMetas={expenseCategories}
+        categoryMetasExpense={expenseCategories}
+        categoryMetasIncome={incomeCategories}
+        paymentMethodMetas={paymentMethodMetas}
+        initial={draftEditInitial}
+        onClose={() => {
+          setDraftEditInitial(null);
+          draftEditIndexRef.current = null;
+        }}
+        onDraftApply={(payload) => {
+          const idx = draftEditIndexRef.current;
+          if (idx === null) return;
+          setDraftTransactions((prev) =>
+            prev.map((item, i) =>
+              i === idx
+                ? {
+                    ...item,
+                    type: payload.type,
+                    date: payload.date,
+                    time: payload.time,
+                    merchant: payload.merchant,
+                    category: payload.category,
+                    method: payload.method,
+                    amount: payload.amount,
+                    currency: payload.currency,
+                    note: payload.note,
+                  }
+                : item
+            )
+          );
+        }}
+      />
     </div>
   );
 }
