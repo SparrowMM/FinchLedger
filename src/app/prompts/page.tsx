@@ -17,6 +17,13 @@ type AiPromptRow = {
 
 type PreviewKind = "effective" | "draft";
 
+type PromptVersionSummary = {
+  id: string;
+  createdAt: string;
+  charCount: number;
+  snippet: string;
+};
+
 export default function PromptsPage() {
   const [prompts, setPrompts] = useState<AiPromptRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -37,6 +44,11 @@ export default function PromptsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [versionSummaries, setVersionSummaries] = useState<PromptVersionSummary[]>(
+    []
+  );
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +84,35 @@ export default function PromptsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadVersions = useCallback(async () => {
+    if (!activeKey) {
+      setVersionSummaries([]);
+      return;
+    }
+    setVersionsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/ai-prompts/versions?key=${encodeURIComponent(activeKey)}`
+      );
+      const json = (await res.json().catch(() => null)) as
+        | { versions?: PromptVersionSummary[]; error?: string }
+        | null;
+      if (!res.ok) {
+        throw new Error(json?.error || "加载历史失败");
+      }
+      setVersionSummaries(json?.versions ?? []);
+    } catch {
+      setVersionSummaries([]);
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [activeKey]);
+
+  useEffect(() => {
+    setSelectedVersionId("");
+    void loadVersions();
+  }, [loadVersions]);
 
   const active = useMemo(
     () => prompts.find((p) => p.key === activeKey) ?? null,
@@ -148,6 +189,7 @@ export default function PromptsPage() {
         throw new Error(json?.error || "保存失败");
       }
       await load();
+      await loadVersions();
       setSuccess("已保存到本地数据库。");
       if (panelMode === "preview") {
         void fetchPreview();
@@ -178,6 +220,7 @@ export default function PromptsPage() {
       setPanelMode("preview");
       setPreviewKind("effective");
       await load();
+      await loadVersions();
       setSuccess("已清除数据库中的自定义，恢复为内置默认。");
     } catch (e) {
       setError(e instanceof Error ? e.message : "恢复默认失败");
@@ -191,6 +234,72 @@ export default function PromptsPage() {
     setDrafts((d) => ({ ...d, [active.key]: active.content }));
     setSuccess("编辑区已重置为当前已加载内容。");
   }
+
+  async function loadSelectedVersionIntoDraft() {
+    if (!active || !selectedVersionId) return;
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(
+        `/api/ai-prompts/versions/${encodeURIComponent(selectedVersionId)}`
+      );
+      const json = (await res.json().catch(() => null)) as
+        | { content?: string; error?: string }
+        | null;
+      if (!res.ok) {
+        throw new Error(json?.error || "读取版本失败");
+      }
+      const text = typeof json?.content === "string" ? json.content : "";
+      setDrafts((d) => ({ ...d, [active.key]: text }));
+      setPanelMode("edit");
+      setSuccess("已将所选历史版本载入编辑区，确认无误后可保存。");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "读取版本失败");
+    }
+  }
+
+  async function restoreSelectedVersionToDatabase() {
+    if (!active || !selectedVersionId) return;
+    if (
+      !window.confirm(
+        "确定用该历史版本覆盖数据库中当前生效的提示词？此操作与在编辑区粘贴后保存等效。"
+      )
+    ) {
+      return;
+    }
+    setSavingKey(active.key);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(
+        `/api/ai-prompts/versions/${encodeURIComponent(selectedVersionId)}`,
+        { method: "POST" }
+      );
+      const json = (await res.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      if (!res.ok) {
+        throw new Error(json?.error || "恢复失败");
+      }
+      setPanelMode("preview");
+      setPreviewKind("effective");
+      await load();
+      await loadVersions();
+      setSuccess("已从历史版本恢复并写入数据库。");
+      void fetchPreview();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "恢复失败");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  const selectedVersionSnippet = useMemo(() => {
+    if (!selectedVersionId) return "";
+    return (
+      versionSummaries.find((v) => v.id === selectedVersionId)?.snippet ?? ""
+    );
+  }, [selectedVersionId, versionSummaries]);
 
   if (loading && prompts.length === 0) {
     return (
@@ -308,6 +417,70 @@ export default function PromptsPage() {
           <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
             {active.hint}
           </p>
+
+          <div className="space-y-2 rounded-xl border border-zinc-100 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                历史版本
+              </span>
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                每次成功保存后自动保留一条快照，每类最多50 条，可随时载入编辑区或直接写回数据库。
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedVersionId}
+                onChange={(e) => setSelectedVersionId(e.target.value)}
+                disabled={versionsLoading || versionSummaries.length === 0}
+                className="min-w-[200px] max-w-full rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs outline-none focus:border-zinc-400 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-500"
+                aria-label="选择历史版本"
+              >
+                <option value="">
+                  {versionsLoading
+                    ? "加载中…"
+                    : versionSummaries.length === 0
+                      ? "暂无历史（保存后生成）"
+                      : "选择一条历史快照…"}
+                </option>
+                {versionSummaries.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {new Date(v.createdAt).toLocaleString()} · {v.charCount}{" "}
+                    字符
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void loadVersions()}
+                disabled={versionsLoading}
+                className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-[11px] text-zinc-600 transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                刷新列表
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadSelectedVersionIntoDraft()}
+                disabled={!selectedVersionId || Boolean(savingKey)}
+                className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-[11px] text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                载入编辑区
+              </button>
+              <button
+                type="button"
+                onClick={() => void restoreSelectedVersionToDatabase()}
+                disabled={!selectedVersionId || Boolean(savingKey)}
+                className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/70"
+              >
+                写回数据库（生效）
+              </button>
+            </div>
+            {selectedVersionId && selectedVersionSnippet ? (
+              <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                摘要：{selectedVersionSnippet}
+                {selectedVersionSnippet.length >= 160 ? "…" : ""}
+              </p>
+            ) : null}
+          </div>
 
           {panelMode === "preview" && (
             <div className="space-y-3">

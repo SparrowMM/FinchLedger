@@ -77,6 +77,16 @@ model AiPrompt {
   createdAt DateTime @default(now())
 }
 
+// 每次成功保存提示词后的内容快照，用于在面板中回滚到历史版本（每 key 仅保留最近若干条）。
+model AiPromptVersion {
+  id        String   @id @default(uuid())
+  promptKey String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([promptKey])
+}
+
 // 分类规则：记录商户名 → 类目的映射，用于 AI 导入时自动分类，避免反复手动确认。
 model CategoryRule {
   id           String          @id @default(uuid())

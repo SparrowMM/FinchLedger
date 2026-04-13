@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendAiPromptVersionSnapshot } from "@/lib/ai-prompt-versions";
 import {
   AI_PROMPT_KEY_BOOKKEEPING,
   AI_PROMPT_KEY_EXPENSE_ANALYSIS,
@@ -154,6 +155,8 @@ export async function PUT(req: Request) {
       create: { key, content: content },
       update: { content: content },
     });
+
+    await appendAiPromptVersionSnapshot(key, content);
 
     return NextResponse.json({ ok: true, key, reverted: false });
   } catch (e) {
