@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  TransactionEditDialog,
+  type EditDialogInitial,
+} from "@/components/transaction-edit-dialog";
 import { formatDateTimeInChina } from "@/lib/china-time";
 import {
   type ApiTransactionsResponse,
@@ -31,67 +35,68 @@ export default function ExpensesPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editInitial, setEditInitial] = useState<EditDialogInitial | null>(null);
   const [categoryMetas, setCategoryMetas] = useState<CategoryMeta[]>([]);
   const [paymentMethodMetas, setPaymentMethodMetas] = useState<CategoryMeta[]>(
     []
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  const expenseLoadIdRef = useRef(0);
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams();
-        params.set("type", "expense");
-        if (month) {
-          params.set("month", month);
-        }
-        const res = await fetch(`/api/transactions?${params.toString()}`);
-        if (!res.ok) {
-          throw new Error("加载支出数据失败");
-        }
-        const data: ApiTransactionsResponse = await res.json();
+  const runExpenseLoad = useCallback(async () => {
+    const loadId = ++expenseLoadIdRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("type", "expense");
+      if (month) {
+        params.set("month", month);
+      }
+      const res = await fetch(`/api/transactions?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error("加载支出数据失败");
+      }
+      const data: ApiTransactionsResponse = await res.json();
 
-        if (cancelled) return;
+      if (loadId !== expenseLoadIdRef.current) {
+        return;
+      }
 
-        const mapped: Expense[] = data.transactions.map((t) => {
-          const { date: datePart, time: timePart } = formatDateTimeInChina(
-            new Date(t.date)
-          );
-          return {
-            id: t.id,
-            date: datePart,
-            time: timePart,
-            category: t.category,
-            merchant: t.name,
-            method: t.account,
-            amount: t.amount,
-            currency: "CNY",
-            note: t.note ?? undefined,
-          };
-        });
+      const mapped: Expense[] = data.transactions.map((t) => {
+        const { date: datePart, time: timePart } = formatDateTimeInChina(
+          new Date(t.date)
+        );
+        return {
+          id: t.id,
+          date: datePart,
+          time: timePart,
+          category: t.category,
+          merchant: t.name,
+          method: t.account,
+          amount: t.amount,
+          currency: "CNY",
+          note: t.note ?? undefined,
+        };
+      });
 
-        setExpenses(mapped);
-        setTotalFromApi(data.summary.expense);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "加载支出数据失败");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      setExpenses(mapped);
+      setTotalFromApi(data.summary.expense);
+    } catch (e) {
+      if (loadId !== expenseLoadIdRef.current) {
+        return;
+      }
+      setError(e instanceof Error ? e.message : "加载支出数据失败");
+    } finally {
+      if (loadId === expenseLoadIdRef.current) {
+        setLoading(false);
       }
     }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
   }, [month]);
+
+  useEffect(() => {
+    void runExpenseLoad();
+  }, [runExpenseLoad]);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,7 +269,7 @@ export default function ExpensesPage() {
             </select>
           </div>
           <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            本页示例数据仅为占位，方便先设计交互和布局。
+            列表支持编辑、删除已导入或手动的记录。
           </div>
         </div>
       </div>
@@ -429,14 +434,34 @@ export default function ExpensesPage() {
                         </span>
                       </td>
                       <td className="py-2 pl-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(e)}
-                          disabled={deletingId === e.id}
-                          className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
-                        >
-                          {deletingId === e.id ? "删除中..." : "删除"}
-                        </button>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditInitial({
+                                id: e.id,
+                                date: e.date,
+                                time: e.time,
+                                title: e.merchant || "",
+                                category: e.category,
+                                method: e.method || "",
+                                amount: e.amount,
+                                note: e.note,
+                              })
+                            }
+                            className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(e)}
+                            disabled={deletingId === e.id}
+                            className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                          >
+                            {deletingId === e.id ? "删除中..." : "删除"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -456,6 +481,18 @@ export default function ExpensesPage() {
           </div>
         </div>
       </div>
+
+      <TransactionEditDialog
+        open={editInitial !== null}
+        variant="expense"
+        categoryMetas={categoryMetas}
+        paymentMethodMetas={paymentMethodMetas}
+        initial={editInitial}
+        onClose={() => setEditInitial(null)}
+        onSaved={() => {
+          void runExpenseLoad();
+        }}
+      />
     </div>
   );
 }

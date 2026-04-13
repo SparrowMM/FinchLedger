@@ -11,6 +11,8 @@ export const DEFAULT_INCOME_CATEGORIES: DefaultIncomeCategory[] = [
   { name: "闲鱼", color: "#F97316", icon: "🐟" },
   { name: "育儿", color: "#0EA5E9", icon: "🍼" },
   { name: "红包", color: "#EF4444", icon: "🧧" },
+  { name: "滴滴", color: "#3B82F6", icon: "🚕" },
+  { name: "利息", color: "#F59E0B", icon: "🪙" },
   { name: "其他", color: "#64748B", icon: "📦" },
   { name: INCOME_FALLBACK_CATEGORY, color: "#71717A", icon: "❓" },
 ];
@@ -34,6 +36,7 @@ export const INCOME_ICON_OPTIONS = [
   "🐟",
   "🍼",
   "🧧",
+  "🚕",
   "📦",
   "❓",
   "💰",

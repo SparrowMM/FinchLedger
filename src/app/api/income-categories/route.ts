@@ -18,11 +18,19 @@ type IncomeCategoryDto = {
 };
 
 async function ensureDefaultCategories() {
-  const count = await countIncomeCategories();
-  if (count > 0) return;
   const delegate = (prisma as unknown as { incomeCategory?: { createMany: (args: { data: typeof DEFAULT_INCOME_CATEGORIES }) => Promise<unknown> } }).incomeCategory;
   if (delegate) {
-    await delegate.createMany({ data: DEFAULT_INCOME_CATEGORIES });
+    const count = await countIncomeCategories();
+    if (count === 0) {
+      await delegate.createMany({ data: DEFAULT_INCOME_CATEGORIES });
+      return;
+    }
+    for (const item of DEFAULT_INCOME_CATEGORIES) {
+      await prisma.$executeRaw`
+        INSERT OR IGNORE INTO "IncomeCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
+        VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+    }
     return;
   }
   for (const item of DEFAULT_INCOME_CATEGORIES) {
