@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { formatDateTimeInChina } from "@/lib/china-time";
 import { TransactionType } from "@prisma/client";
 import { resolveExpenseAnalysisSystemPrompt } from "@/lib/ai-prompts-db";
+import { parseSseStream } from "@/lib/sse-stream";
 
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
@@ -192,6 +193,8 @@ ${plainSummaryLines.join("\n")}
         },
       ],
       temperature: 0.3,
+      // 流式尽快返回响应头，避免 undici 默认 300s headers 超时
+      stream: true,
     };
 
     console.log("[AI-EXPENSE-ANALYSIS] Calling DashScope", {
@@ -212,13 +215,18 @@ ${plainSummaryLines.join("\n")}
       }
     );
 
-    const data = await resp.json();
-
-    if (!resp.ok || (data as any)?.error) {
-      const errorObj = (data as any)?.error ?? data;
+    if (!resp.ok) {
+      let errorBody: { error?: { message?: string }; message?: string } | null =
+        null;
+      try {
+        errorBody = await resp.json();
+      } catch {
+        // ignore
+      }
+      const errorObj = errorBody?.error ?? errorBody;
       const message =
-        errorObj?.message ||
-        errorObj?.error_msg ||
+        (errorObj as { message?: string })?.message ||
+        errorBody?.message ||
         "调用百炼失败，请稍后重试。";
       console.error("[AI-EXPENSE-ANALYSIS] DashScope error", {
         httpStatus: resp.status,
@@ -227,10 +235,15 @@ ${plainSummaryLines.join("\n")}
       return NextResponse.json({ error: message }, { status: 500 });
     }
 
-    const content =
-      (data as any)?.choices?.[0]?.message?.content ??
-      (data as any)?.choices?.[0]?.text ??
-      "";
+    if (!resp.body) {
+      console.error("[AI-EXPENSE-ANALYSIS] DashScope stream has no body");
+      return NextResponse.json(
+        { error: "百炼返回为空流，请稍后重试。" },
+        { status: 500 }
+      );
+    }
+
+    const content = await parseSseStream(resp.body, () => {});
 
     if (typeof content !== "string" || !content.trim()) {
       console.error(
