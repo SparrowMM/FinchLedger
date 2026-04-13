@@ -6,6 +6,7 @@ import {
   TransactionEditDialog,
   type EditDialogInitial,
 } from "@/components/transaction-edit-dialog";
+import { hexToRgba } from "@/lib/shared-types";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
 import { parseSseStream } from "@/lib/sse-stream";
 
@@ -219,6 +220,7 @@ export default function AIBookkeepingPage() {
   const [ruleMatchedIndices, setRuleMatchedIndices] = useState<Set<number>>(
     new Set()
   );
+  const [deletingDraftIndex, setDeletingDraftIndex] = useState<number | null>(null);
   const [draftEditInitial, setDraftEditInitial] =
     useState<EditDialogInitial | null>(null);
   const [draftEditVariant, setDraftEditVariant] = useState<
@@ -229,6 +231,14 @@ export default function AIBookkeepingPage() {
   const paymentMethodMetaMap = useMemo(
     () => new Map(paymentMethodMetas.map((item) => [item.name, item] as const)),
     [paymentMethodMetas]
+  );
+  const expenseCategoryMetaMap = useMemo(
+    () => new Map(expenseCategories.map((item) => [item.name, item] as const)),
+    [expenseCategories]
+  );
+  const incomeCategoryMetaMap = useMemo(
+    () => new Map(incomeCategories.map((item) => [item.name, item] as const)),
+    [incomeCategories]
   );
 
   const allowedPaymentMethodNames = useMemo(
@@ -664,6 +674,27 @@ export default function AIBookkeepingPage() {
     }
   };
 
+  function removeDraftTransaction(index: number) {
+    const currentEditIdx = draftEditIndexRef.current;
+    if (currentEditIdx !== null) {
+      if (currentEditIdx === index) {
+        setDraftEditInitial(null);
+        draftEditIndexRef.current = null;
+      } else if (currentEditIdx > index) {
+        draftEditIndexRef.current = currentEditIdx - 1;
+      }
+    }
+    setDraftTransactions((prev) => prev.filter((_, idx) => idx !== index));
+    setRuleMatchedIndices((prev) => {
+      const next = new Set<number>();
+      for (const i of prev) {
+        if (i < index) next.add(i);
+        if (i > index) next.add(i - 1);
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -789,16 +820,16 @@ export default function AIBookkeepingPage() {
 
       {result && (
         <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+          <div className="space-y-2">
+            <div className="min-w-0">
               <h2 className="text-sm font-medium">AI 生成的记账草稿</h2>
               <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                 与支出/收入列表相同，点击「编辑」在弹窗中核对或修改后再一键保存。
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-3 sm:justify-end">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               {result.summary && (
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="min-w-0 break-words text-xs text-zinc-500 dark:text-zinc-400">
                   {result.summary}
                 </span>
               )}
@@ -837,7 +868,7 @@ export default function AIBookkeepingPage() {
             );
           })()}
 
-          {result.transactions?.length ? (
+          {draftTransactions.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-xs">
                 <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
@@ -924,17 +955,32 @@ export default function AIBookkeepingPage() {
                       </td>
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1">
-                          <span
-                            className={`inline-flex min-h-[1.5rem] items-center rounded-md border px-2 py-1 text-[11px] ${
-                              t.category === "待确认"
-                                ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
-                                : ruleMatchedIndices.has(index)
-                                  ? "border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/40"
-                                  : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950"
-                            }`}
-                          >
-                            {t.category}
-                          </span>
+                          {(() => {
+                            const categoryMeta =
+                              t.type === "expense"
+                                ? expenseCategoryMetaMap.get(t.category)
+                                : incomeCategoryMetaMap.get(t.category);
+                            if (!categoryMeta) {
+                              return (
+                                <span className="inline-flex min-h-[1.5rem] items-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-950">
+                                  {t.category}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className="inline-flex min-h-[1.5rem] items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium"
+                                style={{
+                                  backgroundColor: hexToRgba(categoryMeta.color, 0.15),
+                                  borderColor: hexToRgba(categoryMeta.color, 0.35),
+                                  color: categoryMeta.color,
+                                }}
+                              >
+                                <span>{categoryMeta.icon}</span>
+                                <span>{categoryMeta.name}</span>
+                              </span>
+                            );
+                          })()}
                           {ruleMatchedIndices.has(index) && (
                             <span
                               className="shrink-0 text-[10px] text-blue-500 dark:text-blue-400"
@@ -975,27 +1021,41 @@ export default function AIBookkeepingPage() {
                         })()}
                       </td>
                       <td className="py-2 pl-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            draftEditIndexRef.current = index;
-                            setDraftEditVariant(t.type);
-                            setDraftEditInitial({
-                              id: String(index),
-                              date: normalizeDateForDateInput(t.date),
-                              time: normalizeTimeForTimeInput(t.time),
-                              title: t.merchant ?? "",
-                              category: t.category,
-                              method: t.method ?? "",
-                              amount: t.amount,
-                              note: t.note ?? "",
-                              currency: t.currency ?? "CNY",
-                            });
-                          }}
-                          className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                        >
-                          编辑
-                        </button>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              draftEditIndexRef.current = index;
+                              setDraftEditVariant(t.type);
+                              setDraftEditInitial({
+                                id: String(index),
+                                date: normalizeDateForDateInput(t.date),
+                                time: normalizeTimeForTimeInput(t.time),
+                                title: t.merchant ?? "",
+                                category: t.category,
+                                method: t.method ?? "",
+                                amount: t.amount,
+                                note: t.note ?? "",
+                                currency: t.currency ?? "CNY",
+                              });
+                            }}
+                            className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeletingDraftIndex(index);
+                              removeDraftTransaction(index);
+                              setDeletingDraftIndex(null);
+                            }}
+                            disabled={deletingDraftIndex === index}
+                            className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                          >
+                            {deletingDraftIndex === index ? "删除中..." : "删除"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1044,6 +1104,12 @@ export default function AIBookkeepingPage() {
                 : item
             )
           );
+          setRuleMatchedIndices((prev) => {
+            if (!prev.has(idx)) return prev;
+            const next = new Set(prev);
+            next.delete(idx);
+            return next;
+          });
         }}
       />
     </div>
