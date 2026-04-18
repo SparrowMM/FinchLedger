@@ -40,7 +40,7 @@ export const PAYMENT_METHOD_ICON_OPTIONS = [
 export function normalizePaymentMethodFromList(
   rawMethod: string | null | undefined,
   allowedMethodNames: string[],
-  fallbackMethodName = DEFAULT_PAYMENT_METHOD
+  fallbackMethodName: string = DEFAULT_PAYMENT_METHOD
 ): string {
   const value = rawMethod?.trim();
   if (value && allowedMethodNames.includes(value)) {

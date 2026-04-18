@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { runBootstrapOnce } from "@/lib/bootstrap-once";
 import {
   BOOKKEEPING_IMPORT_CHANNELS,
   type BookkeepingImportChannel,
@@ -42,7 +43,10 @@ export type ImportChannelPaymentRow = {
 export async function listImportChannelPaymentRows(): Promise<
   ImportChannelPaymentRow[]
 > {
-  await ensureImportChannelPaymentMappings();
+  await runBootstrapOnce(
+    "seed:import-channel-payments",
+    ensureImportChannelPaymentMappings
+  );
   return prisma.importChannelPayment.findMany({
     include: { paymentMethod: { select: { id: true, name: true } } },
     orderBy: { channel: "asc" },
@@ -86,7 +90,10 @@ export async function resolveDefaultPaymentMethodNameForChannel(
   channel: BookkeepingImportChannel,
   allowedPaymentMethodNames: string[]
 ): Promise<string> {
-  await ensureImportChannelPaymentMappings();
+  await runBootstrapOnce(
+    "seed:import-channel-payments",
+    ensureImportChannelPaymentMappings
+  );
   const row = await prisma.importChannelPayment.findUnique({
     where: { channel },
     include: { paymentMethod: { select: { name: true } } },

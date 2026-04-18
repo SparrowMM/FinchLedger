@@ -9,6 +9,7 @@ import {
   countExpenseCategories,
   listExpenseCategories,
 } from "@/lib/expense-categories-db";
+import { runBootstrapOnce } from "@/lib/bootstrap-once";
 
 type ExpenseCategoryDto = {
   id: string;
@@ -23,29 +24,27 @@ async function ensureDefaultCategories() {
     const count = await countExpenseCategories();
     if (count === 0) {
       await delegate.createMany({ data: DEFAULT_EXPENSE_CATEGORIES });
-      return;
     }
-    for (const item of DEFAULT_EXPENSE_CATEGORIES) {
-      await prisma.$executeRaw`
+    return;
+  }
+
+  const count = await countExpenseCategories();
+  if (count > 0) {
+    return;
+  }
+
+  for (const item of DEFAULT_EXPENSE_CATEGORIES) {
+    await prisma.$executeRaw`
         INSERT INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
         VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT ("name") DO NOTHING
       `;
-    }
-    return;
-  }
-  for (const item of DEFAULT_EXPENSE_CATEGORIES) {
-    await prisma.$executeRaw`
-      INSERT INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT ("name") DO NOTHING
-    `;
   }
 }
 
 export async function GET() {
   try {
-    await ensureDefaultCategories();
+    await runBootstrapOnce("seed:expense-categories", ensureDefaultCategories);
     const categories = await listExpenseCategories();
     return NextResponse.json({
       categories: categories as ExpenseCategoryDto[],

@@ -225,6 +225,7 @@ export default function ExpensesPage() {
     filtered.length > 0
       ? filtered.reduce((sum, e) => sum + e.amount, 0)
       : totalFromApi;
+  const isInitialLoading = loading && expenses.length === 0 && !error;
 
   return (
     <div className="space-y-6">
@@ -356,7 +357,15 @@ export default function ExpensesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {error ? (
+                {isInitialLoading ? (
+                  Array.from({ length: 4 }).map((_, idx) => (
+                    <tr key={`expense-loading-${idx}`}>
+                      <td colSpan={7} className="py-2">
+                        <div className="h-8 w-full animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-900" />
+                      </td>
+                    </tr>
+                  ))
+                ) : error ? (
                   <tr>
                     <td
                       className="py-6 text-center text-xs text-red-500"

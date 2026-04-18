@@ -10,6 +10,7 @@ import {
   listIncomeCategories,
 } from "@/lib/income-categories-db";
 import { isTableMissingError } from "@/lib/prisma-errors";
+import { runBootstrapOnce } from "@/lib/bootstrap-once";
 
 type IncomeCategoryDto = {
   id: string;
@@ -35,7 +36,7 @@ async function ensureDefaultCategories() {
 
 export async function GET() {
   try {
-    await ensureDefaultCategories();
+    await runBootstrapOnce("seed:income-categories", ensureDefaultCategories);
     const categories = await listIncomeCategories();
     return NextResponse.json({
       categories: categories as IncomeCategoryDto[],

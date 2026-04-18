@@ -227,6 +227,7 @@ export default function IncomePage() {
     filtered.length > 0
       ? filtered.reduce((sum, i) => sum + i.amount, 0)
       : totalFromApi;
+  const isInitialLoading = loading && incomes.length === 0 && !error;
 
   return (
     <div className="space-y-6">
@@ -359,7 +360,15 @@ export default function IncomePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {error ? (
+                {isInitialLoading ? (
+                  Array.from({ length: 4 }).map((_, idx) => (
+                    <tr key={`income-loading-${idx}`}>
+                      <td colSpan={8} className="py-2">
+                        <div className="h-8 w-full animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-900" />
+                      </td>
+                    </tr>
+                  ))
+                ) : error ? (
                   <tr>
                     <td
                       className="py-6 text-center text-xs text-red-500"

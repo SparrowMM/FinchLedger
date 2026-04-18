@@ -10,6 +10,7 @@ import {
   listPaymentMethods,
 } from "@/lib/payment-methods-db";
 import { isTableMissingError } from "@/lib/prisma-errors";
+import { runBootstrapOnce } from "@/lib/bootstrap-once";
 
 type PaymentMethodDto = {
   id: string;
@@ -33,7 +34,7 @@ async function ensureDefaultPaymentMethods() {
 
 export async function GET() {
   try {
-    await ensureDefaultPaymentMethods();
+    await runBootstrapOnce("seed:payment-methods", ensureDefaultPaymentMethods);
     const methods = await listPaymentMethods();
     return NextResponse.json({
       methods: methods as PaymentMethodDto[],

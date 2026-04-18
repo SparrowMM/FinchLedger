@@ -530,7 +530,6 @@ export default function AIBookkeepingPage() {
 
     try {
       // 支付宝 CSV 按 GBK 解码，其它走 UTF-8
-      // @ts-expect-error 浏览器环境下支持传入编码参数
       reader.readAsText(file, isAlipayCsv ? "gbk" : "utf-8");
     } catch {
       reader.readAsText(file);

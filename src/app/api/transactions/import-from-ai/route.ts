@@ -214,7 +214,10 @@ export async function POST(req: Request) {
         ...t,
         normalizedAmount: normalizeAmount((t as { amount?: unknown }).amount),
       }))
-      .filter((t) => t.normalizedAmount !== null);
+      .filter(
+        (t): t is (typeof t & { normalizedAmount: number }) =>
+          t.normalizedAmount !== null
+      );
 
     const buildDataStart = nowMs();
     const data = normalizedTransactions

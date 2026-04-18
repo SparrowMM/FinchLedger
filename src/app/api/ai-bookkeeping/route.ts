@@ -13,6 +13,8 @@ type DashScopeErrorBody = {
     error_msg?: string;
   };
   message?: string;
+  /** 部分错误响应在根级携带 error_msg */
+  error_msg?: string;
 };
 
 type DashScopeResponseBody = DashScopeErrorBody & {

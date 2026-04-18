@@ -109,15 +109,17 @@ export async function DELETE(_req: Request, { params }: Params) {
       );
     }
 
-    await prisma.$transaction([
-      prisma.transaction.updateMany({
+    await prisma.$transaction(async (tx) => {
+      await tx.transaction.updateMany({
         where: { account: method.name },
         data: { account: fallback.name },
-      }),
-      delegate
-        ? delegate.delete({ where: { id } })
-        : prisma.$executeRaw`DELETE FROM "PaymentMethod" WHERE "id" = ${id}`,
-    ]);
+      });
+      if (delegate) {
+        await delegate.delete({ where: { id } });
+      } else {
+        await tx.$executeRaw`DELETE FROM "PaymentMethod" WHERE "id" = ${id}`;
+      }
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

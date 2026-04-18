@@ -1,7 +1,42 @@
-import { PrismaClient as TargetPrisma } from "@prisma/client";
+import { Prisma, PrismaClient as TargetPrisma } from "@prisma/client";
+import { withPgbouncerParamForPooler } from "../src/lib/database-connection-url";
 import { PrismaClient as SourcePrisma } from "../src/generated/prisma-sqlite";
 
 type BatchResult = { count: number };
+
+/** 旧版本地 SQLite 可能缺少后来迁移才加的表 */
+function isPrismaMissingTable(e: unknown): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    (e as { code: string }).code === "P2021"
+  );
+}
+
+async function safeSourceCount(label: string, fn: () => Promise<number>): Promise<number> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (isPrismaMissingTable(e)) {
+      console.warn(`[migrate] ${label}: SQLite 中无此表，行数按 0`);
+      return 0;
+    }
+    throw e;
+  }
+}
+
+async function safeSourceRows<T>(label: string, fn: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (isPrismaMissingTable(e)) {
+      console.warn(`[migrate] ${label}: SQLite 中无此表，跳过复制`);
+      return [];
+    }
+    throw e;
+  }
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -27,88 +62,119 @@ async function copyTable(
 async function main() {
   const databaseUrl = requireEnv("DATABASE_URL");
   const sqliteSourceUrl = requireEnv("SQLITE_SOURCE_URL");
+  const targetUrl = withPgbouncerParamForPooler(databaseUrl) ?? databaseUrl;
 
   const source = new SourcePrisma({
     datasources: { db: { url: sqliteSourceUrl } },
   });
   const target = new TargetPrisma({
-    datasources: { db: { url: databaseUrl } },
+    datasources: { db: { url: targetUrl } },
   });
 
   try {
     const sourceCounts = await Promise.all([
-      source.transaction.count(),
-      source.monthlyExpenseAnalysis.count(),
-      source.expenseCategory.count(),
-      source.incomeCategory.count(),
-      source.paymentMethod.count(),
-      source.importChannelPayment.count(),
-      source.aiPrompt.count(),
-      source.aiPromptVersion.count(),
-      source.categoryRule.count(),
+      safeSourceCount("Transaction", () => source.transaction.count()),
+      safeSourceCount("MonthlyExpenseAnalysis", () => source.monthlyExpenseAnalysis.count()),
+      safeSourceCount("ExpenseCategory", () => source.expenseCategory.count()),
+      safeSourceCount("IncomeCategory", () => source.incomeCategory.count()),
+      safeSourceCount("PaymentMethod", () => source.paymentMethod.count()),
+      safeSourceCount("ImportChannelPayment", () => source.importChannelPayment.count()),
+      safeSourceCount("AiPrompt", () => source.aiPrompt.count()),
+      safeSourceCount("AiPromptVersion", () => source.aiPromptVersion.count()),
+      safeSourceCount("CategoryRule", () => source.categoryRule.count()),
     ]);
 
-    console.log("[migrate] source row counts:", sourceCounts.join(", "));
+    console.log(
+      "[migrate] source row counts (tx, monthlyAnalysis, expCat, incCat, pay, importCh, aiPrompt, aiPromptVer, catRule):",
+      sourceCounts.join(", ")
+    );
 
-    await copyTable("ExpenseCategory", await source.expenseCategory.findMany(), (rows) =>
+    await copyTable(
+      "ExpenseCategory",
+      await safeSourceRows("ExpenseCategory", () => source.expenseCategory.findMany()),
+      (rows) =>
       target.expenseCategory.createMany({
-        data: rows as Parameters<typeof target.expenseCategory.createMany>[0]["data"],
+        data: rows as Prisma.ExpenseCategoryCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("IncomeCategory", await source.incomeCategory.findMany(), (rows) =>
+    await copyTable(
+      "IncomeCategory",
+      await safeSourceRows("IncomeCategory", () => source.incomeCategory.findMany()),
+      (rows) =>
       target.incomeCategory.createMany({
-        data: rows as Parameters<typeof target.incomeCategory.createMany>[0]["data"],
+        data: rows as Prisma.IncomeCategoryCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("PaymentMethod", await source.paymentMethod.findMany(), (rows) =>
+    await copyTable(
+      "PaymentMethod",
+      await safeSourceRows("PaymentMethod", () => source.paymentMethod.findMany()),
+      (rows) =>
       target.paymentMethod.createMany({
-        data: rows as Parameters<typeof target.paymentMethod.createMany>[0]["data"],
+        data: rows as Prisma.PaymentMethodCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("ImportChannelPayment", await source.importChannelPayment.findMany(), (rows) =>
+    await copyTable(
+      "ImportChannelPayment",
+      await safeSourceRows("ImportChannelPayment", () => source.importChannelPayment.findMany()),
+      (rows) =>
       target.importChannelPayment.createMany({
-        data: rows as Parameters<typeof target.importChannelPayment.createMany>[0]["data"],
+        data: rows as Prisma.ImportChannelPaymentCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("AiPrompt", await source.aiPrompt.findMany(), (rows) =>
+    await copyTable(
+      "AiPrompt",
+      await safeSourceRows("AiPrompt", () => source.aiPrompt.findMany()),
+      (rows) =>
       target.aiPrompt.createMany({
-        data: rows as Parameters<typeof target.aiPrompt.createMany>[0]["data"],
+        data: rows as Prisma.AiPromptCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("AiPromptVersion", await source.aiPromptVersion.findMany(), (rows) =>
+    await copyTable(
+      "AiPromptVersion",
+      await safeSourceRows("AiPromptVersion", () => source.aiPromptVersion.findMany()),
+      (rows) =>
       target.aiPromptVersion.createMany({
-        data: rows as Parameters<typeof target.aiPromptVersion.createMany>[0]["data"],
+        data: rows as Prisma.AiPromptVersionCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("CategoryRule", await source.categoryRule.findMany(), (rows) =>
+    await copyTable(
+      "CategoryRule",
+      await safeSourceRows("CategoryRule", () => source.categoryRule.findMany()),
+      (rows) =>
       target.categoryRule.createMany({
-        data: rows as Parameters<typeof target.categoryRule.createMany>[0]["data"],
+        data: rows as Prisma.CategoryRuleCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("MonthlyExpenseAnalysis", await source.monthlyExpenseAnalysis.findMany(), (rows) =>
+    await copyTable(
+      "MonthlyExpenseAnalysis",
+      await safeSourceRows("MonthlyExpenseAnalysis", () => source.monthlyExpenseAnalysis.findMany()),
+      (rows) =>
       target.monthlyExpenseAnalysis.createMany({
-        data: rows as Parameters<typeof target.monthlyExpenseAnalysis.createMany>[0]["data"],
+        data: rows as Prisma.MonthlyExpenseAnalysisCreateManyInput[],
         skipDuplicates: true,
       })
     );
 
-    await copyTable("Transaction", await source.transaction.findMany(), (rows) =>
+    await copyTable(
+      "Transaction",
+      await safeSourceRows("Transaction", () => source.transaction.findMany()),
+      (rows) =>
       target.transaction.createMany({
-        data: rows as Parameters<typeof target.transaction.createMany>[0]["data"],
+        data: rows as Prisma.TransactionCreateManyInput[],
         skipDuplicates: true,
       })
     );

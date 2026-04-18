@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
 import React from "react";
@@ -19,7 +19,14 @@ const navItems = [
 
 export function MainShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const [isNavigating, startNavigation] = React.useTransition();
+  const [pendingHref, setPendingHref] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-black dark:text-zinc-100">
@@ -47,14 +54,30 @@ export function MainShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => {
+                    if (active || isNavigating) return;
+                    e.preventDefault();
+                    setPendingHref(item.href);
+                    startNavigation(() => {
+                      router.push(item.href);
+                    });
+                  }}
                   aria-current={active ? "page" : undefined}
+                  aria-busy={pendingHref === item.href ? "true" : undefined}
                   className={`rounded-full px-3 py-1 transition-colors ${
                     active
                       ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
                       : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  } ${
+                    pendingHref === item.href ? "opacity-80" : ""
                   }`}
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>{item.label}</span>
+                    {pendingHref === item.href && (
+                      <span className="text-[10px] text-current/80">加载中...</span>
+                    )}
+                  </span>
                 </Link>
               );
             })}

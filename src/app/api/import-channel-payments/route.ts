@@ -15,6 +15,7 @@ import {
   PAYMENT_METHOD_COLOR_OPTIONS,
   PAYMENT_METHOD_ICON_OPTIONS,
 } from "@/lib/payment-methods";
+import { runBootstrapOnce } from "@/lib/bootstrap-once";
 
 async function ensureDefaultPaymentMethods() {
   const count = await countPaymentMethods();
@@ -41,8 +42,11 @@ async function ensureDefaultPaymentMethods() {
 
 export async function GET() {
   try {
-    await ensureDefaultPaymentMethods();
-    await ensureImportChannelPaymentMappings();
+    await runBootstrapOnce("seed:payment-methods", ensureDefaultPaymentMethods);
+    await runBootstrapOnce(
+      "seed:import-channel-payments",
+      ensureImportChannelPaymentMappings
+    );
     const rows = await listImportChannelPaymentRows();
     const methods = await listPaymentMethods();
     const byChannel = new Map(rows.map((r) => [r.channel, r]));
