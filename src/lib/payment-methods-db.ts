@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isTableMissingError } from "@/lib/prisma-errors";
 
 type PaymentMethodRow = {
   id: string;
@@ -39,39 +40,60 @@ function getPaymentMethodDelegate(): PaymentMethodDelegate | null {
 }
 
 export async function listPaymentMethods(): Promise<PaymentMethodRow[]> {
-  const delegate = getPaymentMethodDelegate();
-  if (delegate) {
-    return (await delegate.findMany({
-      orderBy: { createdAt: "asc" },
-    })) as PaymentMethodRow[];
+  try {
+    const delegate = getPaymentMethodDelegate();
+    if (delegate) {
+      return (await delegate.findMany({
+        orderBy: { createdAt: "asc" },
+      })) as PaymentMethodRow[];
+    }
+    return prisma.$queryRaw<PaymentMethodRow[]>`
+      SELECT id, name, color, icon FROM "PaymentMethod" ORDER BY "createdAt" ASC
+    `;
+  } catch (error) {
+    if (isTableMissingError(error)) {
+      return [];
+    }
+    throw error;
   }
-  return prisma.$queryRaw<PaymentMethodRow[]>`
-    SELECT id, name, color, icon FROM "PaymentMethod" ORDER BY "createdAt" ASC
-  `;
 }
 
 export async function listPaymentMethodNames(): Promise<string[]> {
-  const delegate = getPaymentMethodDelegate();
-  if (delegate) {
-    const rows = (await delegate.findMany({
-      select: { name: true },
-      orderBy: { createdAt: "asc" },
-    })) as Array<{ name: string }>;
+  try {
+    const delegate = getPaymentMethodDelegate();
+    if (delegate) {
+      const rows = (await delegate.findMany({
+        select: { name: true },
+        orderBy: { createdAt: "asc" },
+      })) as Array<{ name: string }>;
+      return rows.map((r) => r.name);
+    }
+    const rows = await prisma.$queryRaw<Array<{ name: string }>>`
+      SELECT name FROM "PaymentMethod" ORDER BY "createdAt" ASC
+    `;
     return rows.map((r) => r.name);
+  } catch (error) {
+    if (isTableMissingError(error)) {
+      return [];
+    }
+    throw error;
   }
-  const rows = await prisma.$queryRaw<Array<{ name: string }>>`
-    SELECT name FROM "PaymentMethod" ORDER BY "createdAt" ASC
-  `;
-  return rows.map((r) => r.name);
 }
 
 export async function countPaymentMethods(): Promise<number> {
-  const delegate = getPaymentMethodDelegate();
-  if (delegate) {
-    return delegate.count();
+  try {
+    const delegate = getPaymentMethodDelegate();
+    if (delegate) {
+      return delegate.count();
+    }
+    const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*) as count FROM "PaymentMethod"
+    `;
+    return Number(rows[0]?.count ?? 0);
+  } catch (error) {
+    if (isTableMissingError(error)) {
+      return 0;
+    }
+    throw error;
   }
-  const rows = await prisma.$queryRaw<Array<{ count: number }>>`
-    SELECT COUNT(*) as count FROM "PaymentMethod"
-  `;
-  return Number(rows[0]?.count ?? 0);
 }

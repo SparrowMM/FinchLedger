@@ -32,8 +32,9 @@ async function ensureDefaultPaymentMethods() {
   }
   for (const item of DEFAULT_PAYMENT_METHODS) {
     await prisma.$executeRaw`
-      INSERT OR IGNORE INTO "PaymentMethod" ("id", "name", "color", "icon", "createdAt", "updatedAt")
+      INSERT INTO "PaymentMethod" ("id", "name", "color", "icon", "createdAt", "updatedAt")
       VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT ("name") DO NOTHING
     `;
   }
 }

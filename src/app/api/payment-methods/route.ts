@@ -9,6 +9,7 @@ import {
   countPaymentMethods,
   listPaymentMethods,
 } from "@/lib/payment-methods-db";
+import { isTableMissingError } from "@/lib/prisma-errors";
 
 type PaymentMethodDto = {
   id: string;
@@ -18,22 +19,15 @@ type PaymentMethodDto = {
 };
 
 async function ensureDefaultPaymentMethods() {
-  const count = await countPaymentMethods();
-  if (count > 0) return;
-  const delegate = (prisma as unknown as {
-    paymentMethod?: {
-      createMany: (args: { data: typeof DEFAULT_PAYMENT_METHODS }) => Promise<unknown>;
-    };
-  }).paymentMethod;
-  if (delegate) {
-    await delegate.createMany({ data: DEFAULT_PAYMENT_METHODS });
-    return;
-  }
-  for (const item of DEFAULT_PAYMENT_METHODS) {
-    await prisma.$executeRaw`
-      INSERT OR IGNORE INTO "PaymentMethod" ("id", "name", "color", "icon", "createdAt", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `;
+  try {
+    const count = await countPaymentMethods();
+    if (count > 0) return;
+    await prisma.paymentMethod.createMany({ data: DEFAULT_PAYMENT_METHODS });
+  } catch (error) {
+    if (isTableMissingError(error)) {
+      return;
+    }
+    throw error;
   }
 }
 
@@ -98,6 +92,12 @@ export async function POST(req: Request) {
     const err = e as { code?: string; message?: string };
     if (err?.code === "P2002" || err?.message?.includes("UNIQUE constraint failed")) {
       return NextResponse.json({ error: "支付方式名称已存在。" }, { status: 409 });
+    }
+    if (isTableMissingError(e)) {
+      return NextResponse.json(
+        { error: "支付方式数据表不存在，请先执行数据库迁移。" },
+        { status: 503 }
+      );
     }
     console.error("[PAYMENT_METHODS] Create failed", e);
     return NextResponse.json(

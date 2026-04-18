@@ -9,6 +9,7 @@ import {
   countIncomeCategories,
   listIncomeCategories,
 } from "@/lib/income-categories-db";
+import { isTableMissingError } from "@/lib/prisma-errors";
 
 type IncomeCategoryDto = {
   id: string;
@@ -18,26 +19,17 @@ type IncomeCategoryDto = {
 };
 
 async function ensureDefaultCategories() {
-  const delegate = (prisma as unknown as { incomeCategory?: { createMany: (args: { data: typeof DEFAULT_INCOME_CATEGORIES }) => Promise<unknown> } }).incomeCategory;
-  if (delegate) {
+  try {
     const count = await countIncomeCategories();
     if (count === 0) {
-      await delegate.createMany({ data: DEFAULT_INCOME_CATEGORIES });
+      await prisma.incomeCategory.createMany({ data: DEFAULT_INCOME_CATEGORIES });
       return;
     }
-    for (const item of DEFAULT_INCOME_CATEGORIES) {
-      await prisma.$executeRaw`
-        INSERT OR IGNORE INTO "IncomeCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
-        VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `;
+  } catch (error) {
+    if (isTableMissingError(error)) {
+      return;
     }
-    return;
-  }
-  for (const item of DEFAULT_INCOME_CATEGORIES) {
-    await prisma.$executeRaw`
-      INSERT OR IGNORE INTO "IncomeCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `;
+    throw error;
   }
 }
 
@@ -100,6 +92,12 @@ export async function POST(req: Request) {
     const err = e as { code?: string; message?: string };
     if (err?.code === "P2002" || err?.message?.includes("UNIQUE constraint failed")) {
       return NextResponse.json({ error: "类目名称已存在。" }, { status: 409 });
+    }
+    if (isTableMissingError(e)) {
+      return NextResponse.json(
+        { error: "收入类目数据表不存在，请先执行数据库迁移。" },
+        { status: 503 }
+      );
     }
     console.error("[INCOME_CATEGORIES] Create failed", e);
     return NextResponse.json(

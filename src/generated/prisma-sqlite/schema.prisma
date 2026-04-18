@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-sqlite"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("SQLITE_SOURCE_URL")
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  date      DateTime
+  name      String
+  type      TransactionType
+  amount    Decimal
+  category  String
+  account   String
+  note      String?
+  createdAt DateTime        @default(now())
+}
+
+model MonthlyExpenseAnalysis {
+  id        String   @id @default(uuid())
+  month     String
+  type      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model ExpenseCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IncomeCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PaymentMethod {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String
+  icon      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  importChannelPayments ImportChannelPayment[]
+}
+
+model ImportChannelPayment {
+  channel         String        @id
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+}
+
+model AiPrompt {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  content   String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model AiPromptVersion {
+  id        String   @id @default(uuid())
+  promptKey String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([promptKey])
+}
+
+model CategoryRule {
+  id           String          @id @default(uuid())
+  type         TransactionType
+  merchantName String
+  category     String
+  source       String          @default("learned")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([type, merchantName])
+}
+
+enum TransactionType {
+  income
+  expense
+}

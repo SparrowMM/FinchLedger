@@ -3,7 +3,7 @@ CREATE TABLE "AiPromptVersion" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "promptKey" TEXT NOT NULL,
     "content" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateIndex

@@ -4,8 +4,8 @@ CREATE TABLE "ExpenseCategory" (
     "name" TEXT NOT NULL,
     "color" TEXT NOT NULL,
     "icon" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateIndex

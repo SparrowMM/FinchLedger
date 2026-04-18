@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TransactionType } from "@prisma/client";
+import { isTableMissingError } from "@/lib/prisma-errors";
 
 type TransactionDto = {
   id: string;
@@ -103,6 +104,17 @@ export async function GET(req: Request) {
 
     return NextResponse.json(payload);
   } catch (e) {
+    if (isTableMissingError(e)) {
+      const payload: TransactionsResponse = {
+        transactions: [],
+        summary: {
+          income: 0,
+          expense: 0,
+          balance: 0,
+        },
+      };
+      return NextResponse.json(payload);
+    }
     console.error("[TRANSACTIONS] Query failed", e);
     return NextResponse.json(
       { error: "查询交易记录失败，请稍后重试。" },

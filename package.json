@@ -8,12 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "migrate:supabase": "prisma generate && prisma generate --schema prisma/sqlite-source.prisma && prisma migrate deploy && tsx scripts/migrate-sqlite-to-supabase.ts",
     "verify:ai-prompts": "tsx scripts/verify-ai-prompts.ts",
     "verify:import-channel": "tsx scripts/verify-import-channel.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
     "@radix-ui/react-icons": "^1.3.2",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

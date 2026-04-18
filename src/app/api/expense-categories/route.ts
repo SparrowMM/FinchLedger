@@ -27,16 +27,18 @@ async function ensureDefaultCategories() {
     }
     for (const item of DEFAULT_EXPENSE_CATEGORIES) {
       await prisma.$executeRaw`
-        INSERT OR IGNORE INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
+        INSERT INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
         VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT ("name") DO NOTHING
       `;
     }
     return;
   }
   for (const item of DEFAULT_EXPENSE_CATEGORIES) {
     await prisma.$executeRaw`
-      INSERT OR IGNORE INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
+      INSERT INTO "ExpenseCategory" ("id", "name", "color", "icon", "createdAt", "updatedAt")
       VALUES (${crypto.randomUUID()}, ${item.name}, ${item.color}, ${item.icon}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT ("name") DO NOTHING
     `;
   }
 }
