@@ -100,10 +100,10 @@ export function BillAgentWidget() {
         aria-label="打开账单助手"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-[100] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/30 ring-2 ring-white/20 transition hover:scale-105 hover:from-violet-500 hover:to-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 dark:ring-zinc-900 dark:focus-visible:ring-offset-zinc-900"
+        className="fixed bottom-5 right-5 z-[100] flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/30 ring-2 ring-white/20 transition hover:scale-105 hover:from-violet-500 hover:to-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 dark:ring-zinc-900 dark:focus-visible:ring-offset-zinc-900"
       >
         <span className="relative inline-flex">
-          <ChatBubbleIcon className="h-7 w-7" aria-hidden />
+          <ChatBubbleIcon className="h-8 w-8" aria-hidden />
           <span
             className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-900"
             aria-hidden
@@ -115,14 +115,14 @@ export function BillAgentWidget() {
 
       {open ? (
         <div
-          className="fixed bottom-[5.25rem] right-5 z-[100] flex max-h-[min(70vh,560px)] w-[min(calc(100vw-2.5rem),420px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+          className="fixed bottom-[5.75rem] right-5 z-[100] flex max-h-[min(80vh,720px)] w-[min(calc(100vw-2rem),560px)] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
           role="dialog"
           aria-label="账单助手对话"
           aria-modal="true"
         >
           <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <p className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
                 账单助手
               </p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -151,7 +151,7 @@ export function BillAgentWidget() {
 
           <div
             ref={listRef}
-            className="min-h-[200px] flex-1 space-y-3 overflow-y-auto px-4 py-3"
+            className="min-h-[240px] flex-1 space-y-3 overflow-y-auto px-4 py-3"
           >
             {messages.length === 0 && !error ? (
               <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
@@ -164,7 +164,7 @@ export function BillAgentWidget() {
                 className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap ${
                     m.role === "user"
                       ? "bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900"
                       : "bg-zinc-100 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"

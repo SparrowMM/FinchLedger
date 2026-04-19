@@ -29,7 +29,10 @@ export async function buildBillAgentContext(): Promise<BillAgentContextPayload> 
   const summaryRows = await prisma.$queryRaw<
     { type: string; total: unknown; cnt: unknown }[]
   >`
-    SELECT "type", printf("%.2f", SUM(CAST("amount" AS REAL))) AS total, COUNT(*) AS cnt
+    SELECT
+      "type",
+      TO_CHAR(COALESCE(SUM("amount"), 0), 'FM999999999999990.00') AS total,
+      COUNT(*) AS cnt
     FROM "Transaction"
     GROUP BY "type"
   `;
@@ -37,7 +40,11 @@ export async function buildBillAgentContext(): Promise<BillAgentContextPayload> 
   const monthlyRows = await prisma.$queryRaw<
     { ym: string; type: string; total: unknown; cnt: unknown }[]
   >`
-    SELECT strftime('%Y-%m', "date") AS ym, "type", printf("%.2f", SUM(CAST("amount" AS REAL))) AS total, COUNT(*) AS cnt
+    SELECT
+      TO_CHAR(DATE_TRUNC('month', "date"), 'YYYY-MM') AS ym,
+      "type",
+      TO_CHAR(COALESCE(SUM("amount"), 0), 'FM999999999999990.00') AS total,
+      COUNT(*) AS cnt
     FROM "Transaction"
     GROUP BY ym, "type"
     ORDER BY ym DESC
@@ -73,22 +80,28 @@ export async function buildBillAgentContext(): Promise<BillAgentContextPayload> 
   const catExpense = await prisma.$queryRaw<
     { category: string; total: unknown; cnt: unknown }[]
   >`
-    SELECT "category", printf("%.2f", SUM(CAST("amount" AS REAL))) AS total, COUNT(*) AS cnt
+    SELECT
+      "category",
+      TO_CHAR(COALESCE(SUM("amount"), 0), 'FM999999999999990.00') AS total,
+      COUNT(*) AS cnt
     FROM "Transaction"
     WHERE "type" = 'expense'
     GROUP BY "category"
-    ORDER BY SUM(CAST("amount" AS REAL)) DESC
+    ORDER BY SUM("amount") DESC
     LIMIT 40
   `;
 
   const catIncome = await prisma.$queryRaw<
     { category: string; total: unknown; cnt: unknown }[]
   >`
-    SELECT "category", printf("%.2f", SUM(CAST("amount" AS REAL))) AS total, COUNT(*) AS cnt
+    SELECT
+      "category",
+      TO_CHAR(COALESCE(SUM("amount"), 0), 'FM999999999999990.00') AS total,
+      COUNT(*) AS cnt
     FROM "Transaction"
     WHERE "type" = 'income'
     GROUP BY "category"
-    ORDER BY SUM(CAST("amount" AS REAL)) DESC
+    ORDER BY SUM("amount") DESC
     LIMIT 40
   `;
 

@@ -31,7 +31,7 @@ export function MainShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950 dark:bg-black dark:text-zinc-100">
       <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
+        <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-zinc-900 via-zinc-700 to-zinc-500 dark:from-zinc-50 dark:via-zinc-300 dark:to-zinc-500" />
             <div className="flex flex-col">
@@ -97,7 +97,7 @@ export function MainShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-8">
+      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-6 md:py-8">
         {children}
       </main>
 
