@@ -276,7 +276,7 @@ export default function IncomePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-1">
           <div className="text-xs font-medium text-zinc-500">当前筛选收入</div>
           <div className="mt-2 text-2xl font-semibold text-emerald-500">
@@ -286,7 +286,7 @@ export default function IncomePage() {
             共 {filtered.length} 笔
           </div>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-3">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 lg:col-span-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-medium">收入明细</h2>
@@ -301,13 +301,22 @@ export default function IncomePage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-left text-xs">
+            <table className="min-w-[980px] table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-24" />
+                <col className="w-16" />
+                <col className="w-28" />
+                <col className="w-[28%]" />
+                <col className="w-24" />
+                <col className="w-28" />
+                <col className="w-28" />
+              </colgroup>
               <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 <tr>
-                  <th className="py-2 pr-4">
+                  <th className="py-2 pr-3">
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 whitespace-nowrap"
                       onClick={() => handleSort("date")}
                     >
                       <span>日期</span>
@@ -320,11 +329,11 @@ export default function IncomePage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pr-4">时间</th>
-                  <th className="py-2 pr-4">
+                  <th className="py-2 pr-3">时间</th>
+                  <th className="py-2 pr-3">
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 whitespace-nowrap"
                       onClick={() => handleSort("category")}
                     >
                       <span>分类</span>
@@ -337,13 +346,12 @@ export default function IncomePage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pr-4">收入来源</th>
-                  <th className="py-2 pr-4">备注</th>
-                  <th className="py-2 pr-4">收款方式</th>
-                  <th className="py-2 text-right">
+                  <th className="py-2 pr-3">收入来源 / 备注</th>
+                  <th className="py-2 pr-3">收款方式</th>
+                  <th className="py-2 pr-3 text-right">
                     <button
                       type="button"
-                      className="flex w-full items-center justify-end gap-1"
+                      className="flex w-full items-center justify-end gap-1 whitespace-nowrap"
                       onClick={() => handleSort("amount")}
                     >
                       <span>金额</span>
@@ -356,14 +364,14 @@ export default function IncomePage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pl-4 text-right">操作</th>
+                  <th className="py-2 text-right">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {isInitialLoading ? (
                   Array.from({ length: 4 }).map((_, idx) => (
                     <tr key={`income-loading-${idx}`}>
-                      <td colSpan={8} className="py-2">
+                      <td colSpan={7} className="py-2">
                         <div className="h-8 w-full animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-900" />
                       </td>
                     </tr>
@@ -372,21 +380,24 @@ export default function IncomePage() {
                   <tr>
                     <td
                       className="py-6 text-center text-xs text-red-500"
-                      colSpan={8}
+                      colSpan={7}
                     >
                       {error}
                     </td>
                   </tr>
                 ) : filtered.length ? (
                   sorted.map((i) => (
-                    <tr key={i.id}>
-                      <td className="py-2 pr-4">{i.date}</td>
-                      <td className="py-2 pr-4">
+                    <tr
+                      key={i.id}
+                      className="transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-900/50"
+                    >
+                      <td className="py-2 pr-3 align-top whitespace-nowrap">{i.date}</td>
+                      <td className="py-2 pr-3 align-top whitespace-nowrap">
                         {i.time || (
                           <span className="text-[10px] text-zinc-400">—</span>
                         )}
                       </td>
-                      <td className="py-2 pr-4">
+                      <td className="py-2 pr-3 align-top">
                         {(() => {
                           const meta = incomeCategoryMetaMap.get(i.category);
                           if (!meta) {
@@ -411,15 +422,15 @@ export default function IncomePage() {
                           );
                         })()}
                       </td>
-                      <td className="py-2 pr-4">{i.source}</td>
-                      <td className="py-2 pr-4">
-                        {i.note || (
-                          <span className="text-[10px] text-zinc-400">
-                            —
-                          </span>
-                        )}
+                      <td className="py-2 pr-3 align-top">
+                        <div className="truncate pr-2 font-medium text-zinc-700 dark:text-zinc-200">
+                          {i.source || "—"}
+                        </div>
+                        <div className="mt-0.5 line-clamp-2 pr-2 text-[10px] text-zinc-400">
+                          {i.note || "无备注"}
+                        </div>
                       </td>
-                      <td className="py-2 pr-4">
+                      <td className="py-2 pr-3 align-top">
                         {(() => {
                           const meta = paymentMethodMetaMap.get(i.method || "");
                           if (!meta) {
@@ -431,7 +442,7 @@ export default function IncomePage() {
                           }
                           return (
                             <span
-                              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] text-white"
+                              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
                               style={{ backgroundColor: meta.color }}
                             >
                               <span>{meta.icon}</span>
@@ -440,13 +451,13 @@ export default function IncomePage() {
                           );
                         })()}
                       </td>
-                      <td className="py-2 text-right">
-                        <span className="font-medium text-emerald-500">
+                      <td className="py-2 pr-3 text-right align-top whitespace-nowrap">
+                        <span className="font-semibold text-emerald-500">
                           +{i.amount.toFixed(2)} {i.currency}
                         </span>
                       </td>
-                      <td className="py-2 pl-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                      <td className="py-2 text-right align-top">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() =>
@@ -461,7 +472,7 @@ export default function IncomePage() {
                                 note: i.note,
                               })
                             }
-                            className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                            className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
                           >
                             编辑
                           </button>
@@ -469,7 +480,7 @@ export default function IncomePage() {
                             type="button"
                             onClick={() => handleDelete(i)}
                             disabled={deletingId === i.id}
-                            className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                            className="rounded-full border border-red-200 px-2.5 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
                           >
                             {deletingId === i.id ? "删除中..." : "删除"}
                           </button>
@@ -481,7 +492,7 @@ export default function IncomePage() {
                   <tr>
                     <td
                       className="py-6 text-center text-xs text-zinc-400"
-                      colSpan={8}
+                      colSpan={7}
                     >
                       当前筛选条件下暂无收入记录，可以在此创建或从 AI
                       解析结果一键导入。

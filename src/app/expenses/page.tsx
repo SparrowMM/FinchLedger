@@ -275,7 +275,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-1">
           <div className="text-xs font-medium text-zinc-500">当前筛选支出</div>
           <div className="mt-2 text-2xl font-semibold text-red-500">
@@ -285,7 +285,7 @@ export default function ExpensesPage() {
             共 {filtered.length} 笔
           </div>
         </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:col-span-3">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 lg:col-span-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-medium">支出明细</h2>
@@ -299,13 +299,22 @@ export default function ExpensesPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-left text-xs">
+            <table className="min-w-[980px] table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-24" />
+                <col className="w-16" />
+                <col className="w-28" />
+                <col className="w-[34%]" />
+                <col className="w-24" />
+                <col className="w-28" />
+                <col className="w-24" />
+              </colgroup>
               <thead className="border-b border-zinc-100 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
                 <tr>
-                  <th className="py-2 pr-4">
+                  <th className="py-2 pr-3">
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 whitespace-nowrap"
                       onClick={() => handleSort("date")}
                     >
                       <span>日期</span>
@@ -318,11 +327,11 @@ export default function ExpensesPage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pr-4">时间</th>
-                  <th className="py-2 pr-4">
+                  <th className="py-2 pr-3">时间</th>
+                  <th className="py-2 pr-3">
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 whitespace-nowrap"
                       onClick={() => handleSort("category")}
                     >
                       <span>分类</span>
@@ -335,12 +344,12 @@ export default function ExpensesPage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pr-4">商家 / 备注</th>
-                  <th className="py-2 pr-4">支付方式</th>
-                  <th className="py-2 text-right">
+                  <th className="py-2 pr-3">商家 / 备注</th>
+                  <th className="py-2 pr-3">支付方式</th>
+                  <th className="py-2 pr-3 text-right">
                     <button
                       type="button"
-                      className="flex w-full items-center justify-end gap-1"
+                      className="flex w-full items-center justify-end gap-1 whitespace-nowrap"
                       onClick={() => handleSort("amount")}
                     >
                       <span>金额</span>
@@ -353,7 +362,7 @@ export default function ExpensesPage() {
                       </span>
                     </button>
                   </th>
-                  <th className="py-2 pl-4 text-right">操作</th>
+                  <th className="py-2 text-right">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -376,14 +385,17 @@ export default function ExpensesPage() {
                   </tr>
                 ) : filtered.length ? (
                   sorted.map((e) => (
-                    <tr key={e.id}>
-                      <td className="py-2 pr-4">{e.date}</td>
-                      <td className="py-2 pr-4">
+                    <tr
+                      key={e.id}
+                      className="transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-900/50"
+                    >
+                      <td className="py-2 pr-3 align-top whitespace-nowrap">{e.date}</td>
+                      <td className="py-2 pr-3 align-top whitespace-nowrap">
                         {e.time || (
                           <span className="text-[10px] text-zinc-400">—</span>
                         )}
                       </td>
-                      <td className="py-2 pr-4">
+                      <td className="py-2 pr-3 align-top">
                         {(() => {
                           const meta = categoryMetaMap.get(e.category);
                           if (!meta) {
@@ -408,15 +420,17 @@ export default function ExpensesPage() {
                           );
                         })()}
                       </td>
-                      <td className="py-2 pr-4">
-                        <div>{e.merchant || "—"}</div>
+                      <td className="py-2 pr-3 align-top">
+                        <div className="truncate pr-2 font-medium text-zinc-700 dark:text-zinc-200">
+                          {e.merchant || "—"}
+                        </div>
                         {e.note && (
-                          <div className="mt-0.5 text-[10px] text-zinc-400">
+                          <div className="mt-0.5 line-clamp-2 pr-2 text-[10px] text-zinc-400">
                             {e.note}
                           </div>
                         )}
                       </td>
-                      <td className="py-2 pr-4">
+                      <td className="py-2 pr-3 align-top">
                         {(() => {
                           const meta = paymentMethodMetaMap.get(e.method || "");
                           if (!meta) {
@@ -428,7 +442,7 @@ export default function ExpensesPage() {
                           }
                           return (
                             <span
-                              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] text-white"
+                              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
                               style={{ backgroundColor: meta.color }}
                             >
                               <span>{meta.icon}</span>
@@ -437,13 +451,13 @@ export default function ExpensesPage() {
                           );
                         })()}
                       </td>
-                      <td className="py-2 text-right">
-                        <span className="font-medium text-red-500">
+                      <td className="py-2 pr-3 text-right align-top whitespace-nowrap">
+                        <span className="font-semibold text-red-500">
                           -{e.amount.toFixed(2)} {e.currency}
                         </span>
                       </td>
-                      <td className="py-2 pl-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                      <td className="py-2 text-right align-top">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() =>
@@ -458,7 +472,7 @@ export default function ExpensesPage() {
                                 note: e.note,
                               })
                             }
-                            className="rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                            className="rounded-full border border-zinc-200 px-2.5 py-0.5 text-[10px] text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
                           >
                             编辑
                           </button>
@@ -466,7 +480,7 @@ export default function ExpensesPage() {
                             type="button"
                             onClick={() => handleDelete(e)}
                             disabled={deletingId === e.id}
-                            className="rounded-full border border-red-200 px-2 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
+                            className="rounded-full border border-red-200 px-2.5 py-0.5 text-[10px] text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-950/40"
                           >
                             {deletingId === e.id ? "删除中..." : "删除"}
                           </button>
