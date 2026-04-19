@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveBookkeepingSystemPrompt } from "@/lib/ai-prompts-db";
 import { getBookkeepingPromptVarsForChannel } from "@/lib/bookkeeping-prompt-vars";
+import { safeErrorMeta } from "@/lib/api-logger";
 
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
@@ -243,7 +244,7 @@ export async function POST(req: Request) {
         console.error("[AI-BOOKKEEPING] DashScope stream error", {
           requestId,
           httpStatus: resp.status,
-          body: errorBody,
+          error: errorBody?.error?.message || errorBody?.message || "dashscope_error",
           dashscopeElapsedMs: Number(dashscopeElapsedMs.toFixed(2)),
         });
         return NextResponse.json({ error: message }, { status: 500 });
@@ -321,7 +322,7 @@ export async function POST(req: Request) {
     } catch {
       console.error("[AI-BOOKKEEPING] Failed to parse DashScope content as JSON", {
         requestId,
-        contentSnippet: content.slice(0, 500),
+        contentLength: content.length,
       });
       return NextResponse.json(
         {
@@ -360,7 +361,7 @@ export async function POST(req: Request) {
     }
     console.error("[AI-BOOKKEEPING] Unhandled error", {
       requestId,
-      error: e,
+      error: safeErrorMeta(e),
       totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
     });
     return NextResponse.json(

@@ -10,6 +10,8 @@ import {
   listExpenseCategories,
 } from "@/lib/expense-categories-db";
 import { runBootstrapOnce } from "@/lib/bootstrap-once";
+import { z } from "zod";
+import { parseJsonWithSchema } from "@/lib/api-request";
 
 type ExpenseCategoryDto = {
   id: string;
@@ -61,16 +63,16 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  let body: { name?: string; color?: string; icon?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "请求体格式错误。" }, { status: 400 });
-  }
-
-  const name = body.name?.trim();
-  const color = body.color?.trim();
-  const icon = body.icon?.trim();
+  const bodySchema = z.object({
+    name: z.string().min(1).max(40),
+    color: z.string().min(1).max(30),
+    icon: z.string().min(1).max(10),
+  });
+  const parsedBody = await parseJsonWithSchema(req, bodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const name = parsedBody.data.name.trim();
+  const color = parsedBody.data.color.trim();
+  const icon = parsedBody.data.icon.trim();
 
   if (!name || !color || !icon) {
     return NextResponse.json(

@@ -29,6 +29,63 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Production Security Baseline
+
+Set these environment variables in production:
+
+- `FINCHLEDGER_BASIC_AUTH`: required in production, format `username:password`
+- `FINCHLEDGER_API_WRITE_LIMIT`: optional, defaults to `60` requests per minute per route+IP
+- `FINCHLEDGER_API_WRITE_WINDOW_MS`: optional, defaults to `60000`
+- `DATABASE_URL`: required for runtime and backup scripts
+
+This project now enforces:
+
+- Basic Auth at middleware entry (pages + APIs)
+- API write-method rate limit (POST/PUT/PATCH/DELETE)
+- Common secure headers (`X-Frame-Options`, CSP, `X-Content-Type-Options`)
+- Request schema validation for major write APIs
+
+## Deploy on Single Server
+
+1. Install dependencies and build:
+
+```bash
+npm ci
+npm run build
+```
+
+2. Start service with PM2:
+
+```bash
+pm2 startOrReload ecosystem.config.cjs --env production
+pm2 save
+```
+
+Or run one command:
+
+```bash
+bash scripts/deploy.sh
+```
+
+3. Configure Nginx reverse proxy:
+
+- Use `deploy/nginx.finchledger.conf`
+- Add `limit_req_zone` in nginx `http {}` block before using rate limit directives
+
+## Backup & Restore
+
+Create backup:
+
+```bash
+BACKUP_DIR=./backups DATABASE_URL="postgres://..." bash scripts/backup-db.sh
+```
+
+Restore backup:
+
+```bash
+DATABASE_URL="postgres://..." bash scripts/restore-db.sh ./backups/finchledger_xxx.dump
+```
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

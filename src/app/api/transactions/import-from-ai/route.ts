@@ -24,6 +24,9 @@ import {
   learnRulesFromTransactions,
 } from "@/lib/category-rules-db";
 import type { TransactionType } from "@prisma/client";
+import { z } from "zod";
+import { parseJsonWithSchema } from "@/lib/api-request";
+import { safeErrorMeta } from "@/lib/api-logger";
 
 type Channel = "alipay" | "wechat" | "cmb" | "icbc";
 
@@ -39,10 +42,22 @@ type AITransaction = {
   note?: string;
 };
 
-type ImportFromAIBody = {
-  channel: Channel;
-  transactions: AITransaction[];
-};
+const importFromAiSchema = z.object({
+  channel: z.enum(["alipay", "wechat", "cmb", "icbc"]),
+  transactions: z.array(
+    z.object({
+      type: z.enum(["expense", "income"]),
+      date: z.string().min(1).max(50),
+      time: z.string().max(30).optional(),
+      amount: z.union([z.number(), z.string()]),
+      currency: z.string().max(10),
+      category: z.string().max(100),
+      merchant: z.string().max(200).optional(),
+      method: z.string().max(100).optional(),
+      note: z.string().max(500).optional(),
+    })
+  ).min(1).max(500),
+});
 
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -147,37 +162,14 @@ function resolveIncomeCategory(
 export async function POST(req: Request) {
   const requestId = createRequestId("imp");
   const requestStart = nowMs();
-  let body: ImportFromAIBody;
-
-  try {
-    const parseBodyStart = nowMs();
-    body = await req.json();
-    console.log("[TRANSACTIONS-IMPORT] Request body parsed", {
-      requestId,
-      parseBodyElapsedMs: Number((nowMs() - parseBodyStart).toFixed(2)),
-    });
-  } catch {
-    return NextResponse.json(
-      { error: "请求体格式错误，应为 JSON。" },
-      { status: 400 }
-    );
-  }
-
-  const { channel, transactions } = body;
-
-  if (!channel || !["alipay", "wechat", "cmb", "icbc"].includes(channel)) {
-    return NextResponse.json(
-      { error: "缺少或不支持的渠道类型 channel。" },
-      { status: 400 }
-    );
-  }
-
-  if (!Array.isArray(transactions) || transactions.length === 0) {
-    return NextResponse.json(
-      { error: "缺少要导入的交易列表 transactions。" },
-      { status: 400 }
-    );
-  }
+  const parseBodyStart = nowMs();
+  const parsedBody = await parseJsonWithSchema(req, importFromAiSchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { channel, transactions } = parsedBody.data;
+  console.log("[TRANSACTIONS-IMPORT] Request body parsed", {
+    requestId,
+    parseBodyElapsedMs: Number((nowMs() - parseBodyStart).toFixed(2)),
+  });
 
   try {
     const metaLoadStart = nowMs();
@@ -310,7 +302,10 @@ export async function POST(req: Request) {
         }))
       );
     } catch (e) {
-      console.warn("[TRANSACTIONS-IMPORT] Rule learning failed (non-fatal)", e);
+      console.warn(
+        "[TRANSACTIONS-IMPORT] Rule learning failed (non-fatal)",
+        safeErrorMeta(e)
+      );
     }
     const learnElapsedMs = nowMs() - learnStart;
 
@@ -336,7 +331,7 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("[TRANSACTIONS-IMPORT] Import from AI failed", {
       requestId,
-      error: e,
+      error: safeErrorMeta(e),
       totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
     });
     return NextResponse.json(

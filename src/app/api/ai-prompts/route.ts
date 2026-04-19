@@ -14,6 +14,8 @@ import {
   DEFAULT_EXPENSE_ANALYSIS_SYSTEM,
   validateBookkeepingPromptPlaceholders,
 } from "@/lib/ai-prompts-defaults";
+import { z } from "zod";
+import { parseJsonWithSchema } from "@/lib/api-request";
 
 const KNOWN_KEYS = [AI_PROMPT_KEY_BOOKKEEPING, AI_PROMPT_KEY_EXPENSE_ANALYSIS] as const;
 
@@ -109,15 +111,14 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  let body: { key?: string; content?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "请求体应为 JSON。" }, { status: 400 });
-  }
-
-  const key = typeof body.key === "string" ? body.key.trim() : "";
-  const content = typeof body.content === "string" ? body.content : "";
+  const bodySchema = z.object({
+    key: z.string().min(1),
+    content: z.string(),
+  });
+  const parsedBody = await parseJsonWithSchema(req, bodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const key = parsedBody.data.key.trim();
+  const content = parsedBody.data.content;
 
   if (!key || !isKnownKey(key)) {
     return NextResponse.json(

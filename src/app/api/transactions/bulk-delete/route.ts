@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { TransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+import { parseJsonWithSchema } from "@/lib/api-request";
 
 type DeleteScope = "all-expense" | "all-income" | "month";
 
-type DeleteBody = {
-  scope?: DeleteScope;
-  month?: string;
-};
+const deleteBodySchema = z.object({
+  scope: z.enum(["all-expense", "all-income", "month"]),
+  month: z.string().optional(),
+});
 
 function parseMonthRange(month: string) {
   const [yearStr, monthStr] = month.split("-");
@@ -25,17 +27,9 @@ function parseMonthRange(month: string) {
 }
 
 export async function DELETE(req: Request) {
-  let body: DeleteBody;
-  try {
-    body = (await req.json()) as DeleteBody;
-  } catch {
-    return NextResponse.json({ error: "请求体格式错误" }, { status: 400 });
-  }
-
-  const scope = body.scope;
-  if (!scope) {
-    return NextResponse.json({ error: "缺少删除范围 scope" }, { status: 400 });
-  }
+  const parsedBody = await parseJsonWithSchema(req, deleteBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { scope, month } = parsedBody.data;
 
   try {
     if (scope === "all-expense") {
@@ -61,14 +55,14 @@ export async function DELETE(req: Request) {
     }
 
     if (scope === "month") {
-      const month = body.month?.trim();
-      if (!month) {
+      const monthValue = month?.trim();
+      if (!monthValue) {
         return NextResponse.json(
           { error: "清空月流水时必须提供 month（格式 YYYY-MM）" },
           { status: 400 }
         );
       }
-      const range = parseMonthRange(month);
+      const range = parseMonthRange(monthValue);
       if (!range) {
         return NextResponse.json(
           { error: "month 格式错误，请使用 YYYY-MM" },
@@ -89,7 +83,7 @@ export async function DELETE(req: Request) {
         ok: true,
         deletedCount: result.count,
         scope,
-        month,
+        month: monthValue,
       });
     }
 
