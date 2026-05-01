@@ -9,6 +9,7 @@ import {
 import { hexToRgba } from "@/lib/shared-types";
 import { coercePaymentMethodAfterAiParse } from "@/lib/wechat-import-payment-coerce";
 import { parseSseStream } from "@/lib/sse-stream";
+import { parseJsonFromAiText } from "@/lib/ai-json";
 
 const IMPORT_CHANNEL_DEFAULT_FALLBACK: Record<
   "alipay" | "wechat" | "cmb" | "icbc",
@@ -171,6 +172,12 @@ type AIParseResult = {
   transactions: AITransaction[];
   summary?: string;
 };
+
+function isAIParseResult(value: unknown): value is AIParseResult {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { transactions?: unknown };
+  return Array.isArray(candidate.transactions);
+}
 
 type PaymentMethodMeta = {
   id: string;
@@ -572,11 +579,12 @@ export default function AIBookkeepingPage() {
         throw new Error("AI 返回内容为空，请稍后重试。");
       }
 
-      let parsedResult: AIParseResult;
-      try {
-        parsedResult = JSON.parse(fullContent);
-      } catch {
+      const parsedResult = parseJsonFromAiText<AIParseResult>(fullContent);
+      if (!parsedResult) {
         throw new Error("AI 返回的不是合法 JSON，请稍后重试。");
+      }
+      if (!isAIParseResult(parsedResult)) {
+        throw new Error("AI 返回 JSON 缺少 transactions 数组，请稍后重试。");
       }
 
       setResult(parsedResult);

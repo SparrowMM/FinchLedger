@@ -9,6 +9,7 @@ export type DefaultIncomeCategory = {
 export const DEFAULT_INCOME_CATEGORIES: DefaultIncomeCategory[] = [
   { name: "工资", color: "#22C55E", icon: "💼" },
   { name: "闲鱼", color: "#F97316", icon: "🐟" },
+  { name: "出租", color: "#06B6D4", icon: "🏠" },
   { name: "育儿", color: "#0EA5E9", icon: "🍼" },
   { name: "红包", color: "#EF4444", icon: "🧧" },
   { name: "滴滴", color: "#3B82F6", icon: "🚕" },
@@ -35,6 +36,7 @@ export const INCOME_COLOR_OPTIONS = [
 export const INCOME_ICON_OPTIONS = [
   "💼",
   "🐟",
+  "🏠",
   "🍼",
   "🧧",
   "🚕",

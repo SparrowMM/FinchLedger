@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveBookkeepingSystemPrompt } from "@/lib/ai-prompts-db";
 import { getBookkeepingPromptVarsForChannel } from "@/lib/bookkeeping-prompt-vars";
 import { safeErrorMeta } from "@/lib/api-logger";
+import { parseJsonFromAiText } from "@/lib/ai-json";
 
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
       },
       {
         role: "user",
-        content: `channel: ${channel}\n\nrawContent（已做隐私脱敏）:\n${sanitizedRawContent}`,
+        content: `你必须只返回合法 JSON 对象，不要使用 Markdown 代码块（不要输出 \`\`\`json），也不要输出任何额外说明文本。\n\nchannel: ${channel}\n\nrawContent（已做隐私脱敏）:\n${sanitizedRawContent}`,
       },
     ],
     temperature: 0.3,
@@ -309,17 +310,13 @@ export async function POST(req: Request) {
       );
     }
 
-    let parsed;
-    try {
-      const parseStart = nowMs();
-      parsed = JSON.parse(content);
-      const parseElapsedMs = nowMs() - parseStart;
-      console.log("[AI-BOOKKEEPING] JSON parse done", {
-        requestId,
-        parseElapsedMs: Number(parseElapsedMs.toFixed(2)),
-        contentLength: content.length,
-      });
-    } catch {
+    const parseStart = nowMs();
+    const parsed = parseJsonFromAiText<{ transactions?: unknown; summary?: unknown }>(
+      content
+    );
+    const parseElapsedMs = nowMs() - parseStart;
+
+    if (!parsed) {
       console.error("[AI-BOOKKEEPING] Failed to parse DashScope content as JSON", {
         requestId,
         contentLength: content.length,
@@ -332,6 +329,25 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    if (!Array.isArray(parsed.transactions)) {
+      console.error("[AI-BOOKKEEPING] Parsed JSON missing transactions array", {
+        requestId,
+        parsedSnippet: JSON.stringify(parsed).slice(0, 500),
+      });
+      return NextResponse.json(
+        {
+          error: "AI 返回 JSON 缺少 transactions 数组，请稍后重试。",
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log("[AI-BOOKKEEPING] JSON parse done", {
+      requestId,
+      parseElapsedMs: Number(parseElapsedMs.toFixed(2)),
+      contentLength: content.length,
+    });
 
     console.log("[AI-BOOKKEEPING] Parsed AI result", {
       requestId,
