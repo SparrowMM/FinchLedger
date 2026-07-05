@@ -16,6 +16,12 @@ export function BillAgentWidget() {
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (open || !streaming) return;
+    abortRef.current?.abort();
+  }, [open, streaming]);
 
   useEffect(() => {
     if (!open) return;
@@ -54,11 +60,14 @@ export function BillAgentWidget() {
       content: "",
     };
     setMessages([...nextHistory, assistantPlaceholder]);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await fetch("/api/bill-agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: nextHistory.map((m) => ({
             role: m.role,
@@ -79,13 +88,29 @@ export function BillAgentWidget() {
         setMessages([...nextHistory, { role: "assistant", content: full }]);
       });
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        return;
+      }
       const msg = e instanceof Error ? e.message : "发送失败，请稍后重试。";
       setError(msg);
       setMessages(nextHistory);
     } finally {
+      abortRef.current = null;
       setStreaming(false);
     }
   }, [input, messages, streaming]);
+
+  const stop = useCallback(() => {
+    if (!streaming) return;
+    abortRef.current?.abort();
+  }, [streaming]);
+
+  const closePanel = useCallback(() => {
+    if (streaming) {
+      abortRef.current?.abort();
+    }
+    setOpen(false);
+  }, [streaming]);
 
   const clearChat = useCallback(() => {
     if (streaming) return;
@@ -141,7 +166,7 @@ export function BillAgentWidget() {
               <button
                 type="button"
                 aria-label="关闭"
-                onClick={() => setOpen(false)}
+                onClick={closePanel}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
               >
                 <Cross2Icon className="h-4 w-4" />
@@ -195,14 +220,24 @@ export function BillAgentWidget() {
               placeholder="输入问题，Enter 发送，Shift+Enter 换行"
               className="mb-2 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             />
-            <button
-              type="button"
-              disabled={streaming || !input.trim()}
-              onClick={() => void send()}
-              className="w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {streaming ? "正在思考…" : "发送"}
-            </button>
+            {streaming ? (
+              <button
+                type="button"
+                onClick={stop}
+                className="w-full rounded-xl bg-rose-600 py-2.5 text-sm font-medium text-white transition hover:bg-rose-500 dark:bg-rose-500 dark:hover:bg-rose-400"
+              >
+                停止
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!input.trim()}
+                onClick={() => void send()}
+                className="w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                发送
+              </button>
+            )}
           </div>
         </div>
       ) : null}
