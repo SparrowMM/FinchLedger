@@ -4,15 +4,18 @@ import { formatDateTimeInChina } from "@/lib/china-time";
 import { TransactionType } from "@prisma/client";
 import { resolveExpenseAnalysisSystemPrompt } from "@/lib/ai-prompts-db";
 import { parseSseStream } from "@/lib/sse-stream";
-
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
-const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
+import {
+  fetchChatCompletions,
+  missingKeyHint,
+  parseDashScopeError,
+} from "@/lib/bailian-client";
+import { getBailianApiKey, getBailianBaseUrl, getBailianModel } from "@/lib/env";
 
 function getMonthRange(monthParam?: string) {
   if (!monthParam) {
     const now = new Date();
     const year = now.getFullYear();
-    const month = now.getMonth(); // 0-based
+    const month = now.getMonth();
     const start = new Date(year, month, 1);
     const end = new Date(year, month + 1, 1);
     const label = `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -87,8 +90,6 @@ export async function GET(req: Request) {
     }
 
     let parsedContent: unknown = latest.content;
-    // 如果历史数据中存的是字符串化的 JSON，这里尝试反序列化，
-    // 对于已经是对象的情况则直接返回。
     if (typeof latest.content === "string") {
       try {
         parsedContent = JSON.parse(latest.content);
@@ -114,9 +115,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!DASHSCOPE_API_KEY) {
+  if (!getBailianApiKey()) {
     return NextResponse.json(
-      { error: "服务器未配置百炼 API Key，请先设置 DASHSCOPE_API_KEY。" },
+      { error: `服务器未配置百炼 API Key，请先设置 ${missingKeyHint}。` },
       { status: 500 }
     );
   }
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
       monthFromBody = body.month;
     }
   } catch {
-    // 忽略解析错误，保持 monthFromBody 为 undefined，使用默认当前月份
+    // ignore
   }
 
   const { start, end, label } = getMonthRange(monthFromBody);
@@ -180,63 +181,35 @@ export async function POST(req: Request) {
 ${plainSummaryLines.join("\n")}
 `;
 
-    const payload = {
-      model: DASHSCOPE_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt.trim(),
-        },
-        {
-          role: "user",
-          content: userPrompt.trim(),
-        },
-      ],
-      temperature: 0.3,
-      // 流式尽快返回响应头，避免 undici 默认 300s headers 超时
-      stream: true,
-    };
+    const model = getBailianModel();
+    const endpoint = `${getBailianBaseUrl()}/chat/completions`;
 
-    console.log("[AI-EXPENSE-ANALYSIS] Calling DashScope", {
-      model: DASHSCOPE_MODEL,
+    console.log("[AI-EXPENSE-ANALYSIS] Calling Bailian", {
+      model,
+      endpoint,
       month: label,
       count: filteredRows.length,
     });
 
-    const resp = await fetch(
-      "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      }
+    const resp = await fetchChatCompletions(
+      [
+        { role: "system", content: systemPrompt.trim() },
+        { role: "user", content: userPrompt.trim() },
+      ],
+      { temperature: 0.3, stream: true, timeoutSec: 120 }
     );
 
     if (!resp.ok) {
-      let errorBody: { error?: { message?: string }; message?: string } | null =
-        null;
-      try {
-        errorBody = await resp.json();
-      } catch {
-        // ignore
-      }
-      const errorObj = errorBody?.error ?? errorBody;
-      const message =
-        (errorObj as { message?: string })?.message ||
-        errorBody?.message ||
-        "调用百炼失败，请稍后重试。";
-      console.error("[AI-EXPENSE-ANALYSIS] DashScope error", {
+      const message = await parseDashScopeError(resp);
+      console.error("[AI-EXPENSE-ANALYSIS] Bailian error", {
         httpStatus: resp.status,
-        error: errorObj,
+        error: message,
       });
       return NextResponse.json({ error: message }, { status: 500 });
     }
 
     if (!resp.body) {
-      console.error("[AI-EXPENSE-ANALYSIS] DashScope stream has no body");
+      console.error("[AI-EXPENSE-ANALYSIS] Bailian stream has no body");
       return NextResponse.json(
         { error: "百炼返回为空流，请稍后重试。" },
         { status: 500 }
@@ -247,7 +220,7 @@ ${plainSummaryLines.join("\n")}
 
     if (typeof content !== "string" || !content.trim()) {
       console.error(
-        "[AI-EXPENSE-ANALYSIS] Empty or invalid content from DashScope",
+        "[AI-EXPENSE-ANALYSIS] Empty or invalid content from Bailian",
         {
           contentType: typeof content,
         }
@@ -263,7 +236,7 @@ ${plainSummaryLines.join("\n")}
       parsed = JSON.parse(content);
     } catch {
       console.error(
-        "[AI-EXPENSE-ANALYSIS] Failed to parse DashScope content as JSON",
+        "[AI-EXPENSE-ANALYSIS] Failed to parse Bailian content as JSON",
         {
           contentSnippet: content.slice(0, 500),
         }
@@ -301,4 +274,3 @@ ${plainSummaryLines.join("\n")}
     );
   }
 }
-

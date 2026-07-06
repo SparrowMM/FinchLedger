@@ -3,23 +3,24 @@ import { resolveBookkeepingSystemPrompt } from "@/lib/ai-prompts-db";
 import { getBookkeepingPromptVarsForChannel } from "@/lib/bookkeeping-prompt-vars";
 import { safeErrorMeta } from "@/lib/api-logger";
 import { parseJsonFromAiText } from "@/lib/ai-json";
-
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
-const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
+import {
+  fetchChatCompletions,
+  missingKeyHint,
+  parseDashScopeError,
+} from "@/lib/bailian-client";
+import { getBailianApiKey, getBailianBaseUrl, getBailianModel } from "@/lib/env";
 
 type SupportedChannel = "alipay" | "wechat" | "cmb" | "icbc";
 
-type DashScopeErrorBody = {
+const MAX_RAW_CONTENT_CHARS = 300_000;
+
+type DashScopeResponseBody = {
   error?: {
     message?: string;
     error_msg?: string;
   };
   message?: string;
-  /** 部分错误响应在根级携带 error_msg */
   error_msg?: string;
-};
-
-type DashScopeResponseBody = DashScopeErrorBody & {
   choices?: Array<{
     message?: { content?: string };
     text?: string;
@@ -48,58 +49,49 @@ function sanitizeRawContent(
 ): string {
   let sanitized = content;
 
-  // 手机号（含带区号/86 的常见形式），要求左右都不是数字，避免误伤订单号等长串数字
   sanitized = sanitized.replace(
     /(?<!\d)(\+?86[-\s]*)?1[3-9]\d{9}(?!\d)/g,
     "[手机号码已隐藏]"
   );
 
-  // 邮箱
   sanitized = sanitized.replace(
     /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     "[邮箱已隐藏]"
   );
 
-  // 身份证号（18 位或 15 位）
   sanitized = sanitized.replace(
     /\b\d{6}(19|20)?\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b/g,
     "[身份证号已隐藏]"
   );
   sanitized = sanitized.replace(/\b\d{15}\b/g, "[身份证号已隐藏]");
 
-  // 银行卡 / 账户号（连续 12 位以上数字，避免过多误伤）
   sanitized = sanitized.replace(
     /\b\d{12,19}\b/g,
     "[卡号/账号已隐藏]"
   );
 
-  // 像「账号:[158xxxx]」这种模式，整段替换为账号已隐藏
   sanitized = sanitized.replace(
     /(账号)\s*:\s*\[[^\]]+\]/g,
     "账号:[已隐藏]"
   );
 
-  // 支付宝账号 ID（常见 2088 开头的一长串数字）
   if (channel === "alipay") {
     sanitized = sanitized.replace(
       /\b2088\d{6,}\b/g,
       "[支付宝账号ID已隐藏]"
     );
 
-    // 支付宝导出结尾处的「用户:姓名」信息
     sanitized = sanitized.replace(
       /(用户)[：:\s]*[^\s，,]+/g,
       "用户:[已隐藏]"
     );
   }
 
-  // 账户名字段后面的中文姓名或账号（支付宝/微信常见表头）
   sanitized = sanitized.replace(
     /(账户名|户名|姓名|我的账户|付款方账户|收款方账户)[：:\s]*[^\s，,]{2,15}/g,
     (m, p1) => `${p1}[已隐藏]`
   );
 
-  // 支付宝、微信特有的一些「我的信息」字段
   if (channel === "alipay" || channel === "wechat") {
     sanitized = sanitized.replace(
       /(用户名称|登录账号|支付宝账户|微信昵称|微信号)[：:\s]*[^\s，,]{2,30}/g,
@@ -115,9 +107,9 @@ export async function POST(req: Request) {
   const requestStart = nowMs();
   const { searchParams } = new URL(req.url);
   const streamMode = searchParams.get("stream") === "1";
-  if (!DASHSCOPE_API_KEY) {
+  if (!getBailianApiKey()) {
     return NextResponse.json(
-      { error: "服务器未配置百炼 API Key，请先设置 DASHSCOPE_API_KEY。" },
+      { error: `服务器未配置百炼 API Key，请先设置 ${missingKeyHint}。` },
       { status: 500 }
     );
   }
@@ -135,7 +127,6 @@ export async function POST(req: Request) {
   const channel = body.channel?.trim() as SupportedChannel | undefined;
   const rawContent = body.rawContent?.trim();
 
-  // 只记录长度，避免把原始账单全文打到日志里
   console.log("[AI-BOOKKEEPING] Incoming request", {
     requestId,
     channel,
@@ -167,7 +158,15 @@ export async function POST(req: Request) {
     );
   }
 
-  // 在进入大模型前统一进行脱敏处理
+  if (rawContent.length > MAX_RAW_CONTENT_CHARS) {
+    return NextResponse.json(
+      {
+        error: `流水内容过长（${rawContent.length} 字符），请按月份或日期拆分后再解析；建议单次不超过 ${MAX_RAW_CONTENT_CHARS} 字符。`,
+      },
+      { status: 413 }
+    );
+  }
+
   const sanitizeStart = nowMs();
   const sanitizedRawContent = sanitizeRawContent(channel, rawContent);
   const sanitizeElapsedMs = nowMs() - sanitizeStart;
@@ -177,82 +176,52 @@ export async function POST(req: Request) {
   const categoriesElapsedMs = nowMs() - categoriesStart;
 
   const systemPrompt = await resolveBookkeepingSystemPrompt(promptVars);
+  const model = getBailianModel();
+  const endpoint = `${getBailianBaseUrl()}/chat/completions`;
 
-  const basePayload = {
-    model: DASHSCOPE_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: systemPrompt,
-      },
-      {
-        role: "user",
-        content: `你必须只返回合法 JSON 对象，不要使用 Markdown 代码块（不要输出 \`\`\`json），也不要输出任何额外说明文本。\n\nchannel: ${channel}\n\nrawContent（已做隐私脱敏）:\n${sanitizedRawContent}`,
-      },
-    ],
-    temperature: 0.3,
-  } as const;
-
-  const dashscopePayload = streamMode
-    ? { ...basePayload, stream: true }
-    : basePayload;
+  const messages = [
+    { role: "system", content: systemPrompt },
+    {
+      role: "user",
+      content: `你必须只返回合法 JSON 对象，不要使用 Markdown 代码块（不要输出 \`\`\`json），也不要输出任何额外说明文本。\n\nchannel: ${channel}\n\nrawContent（已做隐私脱敏）:\n${sanitizedRawContent}`,
+    },
+  ];
 
   try {
-    const payloadBuildStart = nowMs();
-    const payloadJson = JSON.stringify(dashscopePayload);
-    const payloadBuildElapsedMs = nowMs() - payloadBuildStart;
-
-    console.log("[AI-BOOKKEEPING] Calling DashScope (OpenAI compatible)", {
+    console.log("[AI-BOOKKEEPING] Calling Bailian", {
       requestId,
-      model: DASHSCOPE_MODEL,
-      endpoint: "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
+      model,
+      endpoint,
       streamMode,
       rawContentLength: rawContent.length,
       sanitizedRawContentLength: sanitizedRawContent.length,
       promptLength: systemPrompt.length,
-      payloadBytes: Buffer.byteLength(payloadJson, "utf8"),
       sanitizeElapsedMs: Number(sanitizeElapsedMs.toFixed(2)),
       categoriesElapsedMs: Number(categoriesElapsedMs.toFixed(2)),
-      payloadBuildElapsedMs: Number(payloadBuildElapsedMs.toFixed(2)),
     });
 
     const dashscopeStart = nowMs();
-    const resp = await fetch(
-      "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: payloadJson,
-      }
-    );
+    const resp = await fetchChatCompletions(messages, {
+      temperature: 0.3,
+      stream: streamMode,
+      timeoutSec: 120,
+    });
     const dashscopeElapsedMs = nowMs() - dashscopeStart;
 
     if (streamMode) {
       if (!resp.ok) {
-        let errorBody: DashScopeErrorBody | null = null;
-        try {
-          errorBody = await resp.json();
-        } catch {
-          // ignore
-        }
-        const message =
-          errorBody?.error?.message ||
-          errorBody?.message ||
-          "调用百炼失败，请稍后重试。";
-        console.error("[AI-BOOKKEEPING] DashScope stream error", {
+        const message = await parseDashScopeError(resp);
+        console.error("[AI-BOOKKEEPING] Bailian stream error", {
           requestId,
           httpStatus: resp.status,
-          error: errorBody?.error?.message || errorBody?.message || "dashscope_error",
+          error: message,
           dashscopeElapsedMs: Number(dashscopeElapsedMs.toFixed(2)),
         });
         return NextResponse.json({ error: message }, { status: 500 });
       }
 
       if (!resp.body) {
-        console.error("[AI-BOOKKEEPING] DashScope stream has no body");
+        console.error("[AI-BOOKKEEPING] Bailian stream has no body");
         return NextResponse.json(
           { error: "百炼返回为空流，请稍后重试。" },
           { status: 500 }
@@ -271,7 +240,7 @@ export async function POST(req: Request) {
     const data = (await resp.json()) as DashScopeResponseBody;
     const totalElapsedMs = nowMs() - requestStart;
 
-    console.log("[AI-BOOKKEEPING] DashScope response meta", {
+    console.log("[AI-BOOKKEEPING] Bailian response meta", {
       requestId,
       httpStatus: resp.status,
       ok: resp.ok,
@@ -286,7 +255,7 @@ export async function POST(req: Request) {
         errorObj?.message ||
         errorObj?.error_msg ||
         "调用百炼失败，请稍后重试。";
-      console.error("[AI-BOOKKEEPING] DashScope error", {
+      console.error("[AI-BOOKKEEPING] Bailian error", {
         requestId,
         httpStatus: resp.status,
         error: errorObj,
@@ -301,7 +270,7 @@ export async function POST(req: Request) {
       "";
 
     if (typeof content !== "string" || !content.trim()) {
-      console.error("[AI-BOOKKEEPING] Empty or invalid content from DashScope", {
+      console.error("[AI-BOOKKEEPING] Empty or invalid content from Bailian", {
         contentType: typeof content,
       });
       return NextResponse.json(
@@ -317,7 +286,7 @@ export async function POST(req: Request) {
     const parseElapsedMs = nowMs() - parseStart;
 
     if (!parsed) {
-      console.error("[AI-BOOKKEEPING] Failed to parse DashScope content as JSON", {
+      console.error("[AI-BOOKKEEPING] Failed to parse Bailian content as JSON", {
         requestId,
         contentLength: content.length,
       });
@@ -366,7 +335,7 @@ export async function POST(req: Request) {
         e.name === "AbortError" ||
         e.message.includes("aborted"));
     if (isTimeoutError) {
-      console.error("[AI-BOOKKEEPING] DashScope request timeout", {
+      console.error("[AI-BOOKKEEPING] Bailian request timeout", {
         requestId,
         totalElapsedMs: Number((nowMs() - requestStart).toFixed(2)),
       });
@@ -386,4 +355,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

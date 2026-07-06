@@ -28,8 +28,6 @@ import { z } from "zod";
 import { parseJsonWithSchema } from "@/lib/api-request";
 import { safeErrorMeta } from "@/lib/api-logger";
 
-type Channel = "alipay" | "wechat" | "cmb" | "icbc";
-
 type AITransaction = {
   type: "expense" | "income";
   date: string;
@@ -201,15 +199,13 @@ export async function POST(req: Request) {
         allowedPaymentMethods
       );
 
-    const normalizedTransactions = transactions
-      .map((t) => ({
-        ...t,
-        normalizedAmount: normalizeAmount((t as { amount?: unknown }).amount),
-      }))
-      .filter(
-        (t): t is (typeof t & { normalizedAmount: number }) =>
-          t.normalizedAmount !== null
-      );
+    const normalizedTransactions = transactions.flatMap(
+      (t): Array<AITransaction & { normalizedAmount: number }> => {
+        const normalizedAmount = normalizeAmount(t.amount);
+        if (normalizedAmount === null) return [];
+        return [{ ...t, amount: normalizedAmount, normalizedAmount }];
+      }
+    );
 
     const buildDataStart = nowMs();
     const data = normalizedTransactions
@@ -340,4 +336,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

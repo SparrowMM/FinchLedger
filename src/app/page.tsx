@@ -58,6 +58,33 @@ type PieTooltipPayload = {
   percent?: number;
 };
 
+function numberFromTooltipValue(value: unknown): number {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatPieTooltip(
+  value: unknown,
+  _name: unknown,
+  props: unknown
+): [string, string] {
+  const amount = numberFromTooltipValue(value);
+  const payload = (props as { payload?: PieTooltipPayload })?.payload;
+  const percent =
+    typeof payload?.percent === "number" ? payload.percent * 100 : NaN;
+  const percentText = Number.isNaN(percent)
+    ? ""
+    : ` (${percent.toFixed(1)}%)`;
+  return [`¥ ${amount.toFixed(2)}${percentText}`, "金额"];
+}
+
+function formatTrendTooltip(value: unknown, name: unknown): [string, string] {
+  const amount = numberFromTooltipValue(value);
+  const label =
+    name === "income" ? "收入" : name === "expense" ? "支出" : String(name ?? "");
+  return [`¥ ${amount.toFixed(2)}`, label];
+}
+
 type MonthlyTrendItem = {
   month: string;
   income: number;
@@ -572,24 +599,7 @@ export default function Home() {
                         />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value: number, name, props) => {
-                        const amount = value as number;
-                        const payload = (props as { payload?: PieTooltipPayload })
-                          ?.payload;
-                        const percent =
-                          typeof payload?.percent === "number"
-                            ? payload.percent * 100
-                            : NaN;
-                        const percentText = Number.isNaN(percent)
-                          ? ""
-                          : ` (${percent.toFixed(1)}%)`;
-                        return [
-                          `¥ ${amount.toFixed(2)}${percentText}`,
-                          "金额",
-                        ];
-                      }}
-                    />
+                    <Tooltip formatter={formatPieTooltip} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex max-h-64 flex-col space-y-2 overflow-y-auto pr-1 text-xs">
@@ -671,24 +681,7 @@ export default function Home() {
                         />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value: number, name, props) => {
-                        const amount = value as number;
-                        const payload = (props as { payload?: PieTooltipPayload })
-                          ?.payload;
-                        const percent =
-                          typeof payload?.percent === "number"
-                            ? payload.percent * 100
-                            : NaN;
-                        const percentText = Number.isNaN(percent)
-                          ? ""
-                          : ` (${percent.toFixed(1)}%)`;
-                        return [
-                          `¥ ${amount.toFixed(2)}${percentText}`,
-                          "金额",
-                        ];
-                      }}
-                    />
+                    <Tooltip formatter={formatPieTooltip} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex max-h-64 flex-col space-y-2 overflow-y-auto pr-1 text-xs">
@@ -758,17 +751,7 @@ export default function Home() {
                     axisLine={false}
                     tickFormatter={(value) => `¥${value}`}
                   />
-                  <Tooltip
-                    formatter={(value: number, name) => {
-                      const label =
-                        name === "income"
-                          ? "收入"
-                          : name === "expense"
-                            ? "支出"
-                            : name;
-                      return [`¥ ${value.toFixed(2)}`, label];
-                    }}
-                  />
+                  <Tooltip formatter={formatTrendTooltip} />
                   <Legend />
                   <Line
                     type="monotone"

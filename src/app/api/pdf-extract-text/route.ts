@@ -3,6 +3,12 @@ import * as pdf from "pdf-parse";
 
 export const runtime = "nodejs";
 
+type PdfParseResult = {
+  text?: string;
+};
+
+type PdfParseFn = (input: Buffer) => Promise<PdfParseResult>;
+
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
@@ -41,7 +47,12 @@ export async function POST(req: Request) {
     try {
       const extractStart = nowMs();
       // 优先使用 pdf-parse 做结构化文本抽取
-      const pdfFn = (pdf as any).default ?? (pdf as any);
+      const pdfModule = pdf as unknown as PdfParseFn | { default?: PdfParseFn };
+      const pdfFn =
+        typeof pdfModule === "function" ? pdfModule : pdfModule.default;
+      if (!pdfFn) {
+        throw new Error("pdf_parse_unavailable");
+      }
       const result = await pdfFn(buffer);
       text = (result.text || "").trim();
       extractElapsedMs = nowMs() - extractStart;
@@ -98,4 +109,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

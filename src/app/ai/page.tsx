@@ -168,6 +168,29 @@ function sanitizeClientRawContent(
   return sanitized;
 }
 
+async function readResponseError(
+  res: Response,
+  fallback: string
+): Promise<string> {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const data = await res.json().catch(() => null);
+    if (typeof data?.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+    if (typeof data?.message === "string" && data.message.trim()) {
+      return data.message;
+    }
+  }
+
+  const text = await res.text().catch(() => "");
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized) {
+    return `${fallback}（HTTP ${res.status}：${normalized.slice(0, 240)}）`;
+  }
+  return `${fallback}（HTTP ${res.status}）`;
+}
+
 type AIParseResult = {
   transactions: AITransaction[];
   summary?: string;
@@ -281,10 +304,10 @@ export default function AIBookkeepingPage() {
 
   const fileAccept =
     channel === "alipay"
-      ? ".csv,.txt"
+      ? ".csv,.txt,.png,.jpg,.jpeg,.webp"
       : channel === "wechat" || channel === "cmb"
-      ? ".xlsx,.xls"
-      : ".pdf,.xlsx,.xls";
+      ? ".xlsx,.xls,.png,.jpg,.jpeg,.webp"
+      : ".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.webp";
 
   const sortedTransactions = useMemo(() => {
     const transactions = draftTransactions.map((item, index) => ({
@@ -447,7 +470,66 @@ export default function AIBookkeepingPage() {
     const isCsv = lowerName.endsWith(".csv");
     const isXlsx = lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls");
     const isPdf = lowerName.endsWith(".pdf");
+    const isImage =
+      lowerName.endsWith(".png") ||
+      lowerName.endsWith(".jpg") ||
+      lowerName.endsWith(".jpeg") ||
+      lowerName.endsWith(".webp");
     const isAlipayCsv = channel === "alipay" && isCsv;
+
+    const isSupportedFile =
+      isImage ||
+      (channel === "alipay" && (isCsv || lowerName.endsWith(".txt"))) ||
+      ((channel === "wechat" || channel === "cmb") && isXlsx) ||
+      (channel === "icbc" && (isXlsx || isPdf));
+    if (!isSupportedFile) {
+      setRawContent("");
+      setError(
+        channel === "alipay"
+          ? "当前支付宝渠道仅支持 CSV/TXT 或账单截图。"
+          : channel === "wechat"
+          ? "当前微信渠道仅支持 XLSX/XLS 或账单截图。"
+          : channel === "cmb"
+          ? "当前招商银行渠道仅支持 XLSX/XLS 或账单截图。"
+          : "当前工商银行渠道仅支持 XLSX/XLS、PDF 或账单截图。"
+      );
+      return;
+    }
+
+    if (isImage) {
+      const form = new FormData();
+      form.append("file", file);
+      setLoading(true);
+      setError(null);
+      void fetch(`/api/ai-bookkeeping/from-image?channel=${channel}`, {
+        method: "POST",
+        body: form,
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(
+              await readResponseError(res, "账单图片识别失败，请稍后重试。")
+            );
+          }
+          const data = await res.json().catch(() => null);
+          if (!data?.text || typeof data.text !== "string") {
+            throw new Error("未能从图片中提取到可读文本。");
+          }
+          setRawContent(sanitizeClientRawContent(channel, data.text));
+        })
+        .catch((err) => {
+          console.error("Failed to extract text from bill image", err);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "账单图片识别失败，请稍后重试。"
+          );
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+      return;
+    }
 
     // 微信 / 招商 / 工商银行官方导出的账单多为 xlsx，这里直接在前端解析为可读文本
     if ((channel === "wechat" || channel === "cmb" || channel === "icbc") && isXlsx) {
@@ -495,15 +577,16 @@ export default function AIBookkeepingPage() {
             body: arrayBuffer,
           });
 
-          const data = await res.json().catch(() => null);
-
           if (!res.ok) {
             throw new Error(
-              data?.error ||
+              await readResponseError(
+                res,
                 "解析工商银行 PDF 失败，请确认为正常的对账单后重试。"
+              )
             );
           }
 
+          const data = await res.json().catch(() => null);
           if (!data?.text || typeof data.text !== "string") {
             throw new Error("未能从 PDF 中提取到可读文本。");
           }
@@ -563,8 +646,7 @@ export default function AIBookkeepingPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "AI 解析失败，请稍后重试。");
+        throw new Error(await readResponseError(res, "AI 解析失败，请稍后重试。"));
       }
 
       if (!res.body) {
@@ -723,12 +805,12 @@ export default function AIBookkeepingPage() {
             <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
               当前支持：支付宝、微信支付、招商银行、工商银行。
               {channel === "wechat"
-                ? " 微信渠道推荐上传 xlsx 模板文件（或复制表格文本），其他渠道推荐上传 CSV 文件或复制账单文本到下方输入框。"
+                ? " 微信渠道推荐上传 xlsx 模板文件（或复制表格文本），也支持上传账单截图由 AI 识别。"
                 : channel === "cmb"
-                ? " 招商银行推荐上传官方导出的 xlsx 对账单文件（或复制表格文本）到下方输入框。"
+                ? " 招商银行推荐上传官方导出的 xlsx 对账单文件（或复制表格文本），也支持上传账单截图。"
                 : channel === "icbc"
-                ? " 工商银行推荐上传官方导出的 xlsx 或 PDF 对账单模板，在其他工具中完成脱敏后，将账单正文复制粘贴到下方输入框。"
-                : " 支付宝推荐上传 CSV 文件，或手动复制账单文本到下方输入框。"}
+                ? " 工商银行推荐上传官方导出的 xlsx 或 PDF 对账单，也支持上传账单截图；或在本地脱敏后复制粘贴文本。"
+                : " 支付宝推荐上传 CSV 文件，或上传账单截图、手动复制账单文本。"}
             </div>
           </div>
           <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:gap-3">
@@ -749,12 +831,12 @@ export default function AIBookkeepingPage() {
                 {fileName
                   ? `已选择：${fileName}`
                   : channel === "wechat"
-                  ? "上传微信账单 xlsx 文件"
+                  ? "上传微信账单 xlsx / 截图"
                   : channel === "cmb"
-                  ? "上传招商银行账单 xlsx 文件"
+                  ? "上传招商银行账单 xlsx / 截图"
                   : channel === "icbc"
-                  ? "上传工商银行 xlsx/PDF 对账单（或复制账单文本）"
-                  : "上传支付宝账单 CSV 文件"}
+                  ? "上传工商银行 xlsx/PDF / 截图"
+                  : "上传支付宝 CSV / 截图"}
               </span>
               <input
                 type="file"

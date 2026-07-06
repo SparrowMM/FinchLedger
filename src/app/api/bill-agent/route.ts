@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import { buildBillAgentContext } from "@/lib/bill-agent-context";
-
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
-/** 与 `/api/ai-bookkeeping`、`/api/ai-expense-analysis` 一致，由 DASHSCOPE_MODEL 控制（默认 qwen-plus）。 */
-const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL || "qwen-plus";
+import {
+  fetchChatCompletions,
+  missingKeyHint,
+  parseDashScopeError,
+} from "@/lib/bailian-client";
+import { getBailianApiKey, getBailianBaseUrl, getBailianModel } from "@/lib/env";
 
 type ChatMessage = { role: string; content: string };
-
-type DashScopeErrorBody = {
-  error?: { message?: string; error_msg?: string };
-  message?: string;
-};
 
 function nowMs() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -53,9 +50,9 @@ export async function POST(req: Request) {
   const requestId = createRequestId();
   const requestStart = nowMs();
 
-  if (!DASHSCOPE_API_KEY) {
+  if (!getBailianApiKey()) {
     return NextResponse.json(
-      { error: "服务器未配置百炼 API Key，请先设置 DASHSCOPE_API_KEY。" },
+      { error: `服务器未配置百炼 API Key，请先设置 ${missingKeyHint}。` },
       { status: 500 }
     );
   }
@@ -101,56 +98,34 @@ export async function POST(req: Request) {
   }
 
   const systemContent = `${SYSTEM_INSTRUCTIONS}\n\n当前账本快照（JSON）：\n${contextJson}`;
-
-  const dashscopePayload = {
-    model: DASHSCOPE_MODEL,
-    messages: [
-      { role: "system" as const, content: systemContent },
-      ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-    ],
-    temperature: 0.4,
-    stream: true,
-  };
+  const model = getBailianModel();
+  const endpoint = `${getBailianBaseUrl()}/chat/completions`;
 
   try {
-    const payloadJson = JSON.stringify(dashscopePayload);
-    console.log("[BILL-AGENT] Calling DashScope", {
+    console.log("[BILL-AGENT] Calling Bailian", {
       requestId,
-      model: DASHSCOPE_MODEL,
+      model,
+      endpoint,
       historyTurns: history.length,
       contextBytes: Buffer.byteLength(contextJson, "utf8"),
-      payloadBytes: Buffer.byteLength(payloadJson, "utf8"),
     });
 
     const dashscopeStart = nowMs();
-    const resp = await fetch(
-      "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: payloadJson,
-      }
+    const resp = await fetchChatCompletions(
+      [
+        { role: "system", content: systemContent },
+        ...history.map((m) => ({ role: m.role, content: m.content })),
+      ],
+      { temperature: 0.4, stream: true, timeoutSec: 120 }
     );
     const dashscopeElapsedMs = nowMs() - dashscopeStart;
 
     if (!resp.ok) {
-      let errorBody: DashScopeErrorBody | null = null;
-      try {
-        errorBody = await resp.json();
-      } catch {
-        // ignore
-      }
-      const message =
-        errorBody?.error?.message ||
-        errorBody?.message ||
-        "调用百炼失败，请稍后重试。";
-      console.error("[BILL-AGENT] DashScope error", {
+      const message = await parseDashScopeError(resp);
+      console.error("[BILL-AGENT] Bailian error", {
         requestId,
         httpStatus: resp.status,
-        body: errorBody,
+        message,
         dashscopeElapsedMs: Number(dashscopeElapsedMs.toFixed(2)),
       });
       return NextResponse.json({ error: message }, { status: 500 });

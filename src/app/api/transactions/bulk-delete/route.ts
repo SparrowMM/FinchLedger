@@ -4,8 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { parseJsonWithSchema } from "@/lib/api-request";
 
-type DeleteScope = "all-expense" | "all-income" | "month";
-
 const deleteBodySchema = z.object({
   scope: z.enum(["all-expense", "all-income", "month"]),
   month: z.string().optional(),

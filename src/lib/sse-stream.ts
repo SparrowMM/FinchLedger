@@ -4,6 +4,9 @@
  */
 
 type StreamChunk = {
+  error?: { message?: string; error_msg?: string };
+  message?: string;
+  error_msg?: string;
   choices?: Array<{
     delta?: { content?: string };
     message?: { content?: string };
@@ -26,6 +29,43 @@ export async function parseSseStream(
   let buffer = "";
   let full = "";
 
+  function handleEvent(event: string) {
+    const dataStr = event
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim())
+      .join("\n")
+      .trim();
+    if (!dataStr || dataStr === "[DONE]") return;
+
+    let parsed: StreamChunk;
+    try {
+      parsed = JSON.parse(dataStr);
+    } catch {
+      return;
+    }
+
+    const errorMessage =
+      parsed.error?.message ||
+      parsed.error?.error_msg ||
+      parsed.message ||
+      parsed.error_msg;
+    if (errorMessage) {
+      throw new Error(errorMessage);
+    }
+
+    const delta =
+      parsed.choices?.[0]?.delta?.content ??
+      parsed.choices?.[0]?.message?.content ??
+      parsed.choices?.[0]?.text ??
+      "";
+    if (typeof delta === "string" && delta) {
+      full += delta;
+      onDelta(full);
+    }
+  }
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -35,28 +75,12 @@ export async function parseSseStream(
     buffer = events.pop() || "";
 
     for (const event of events) {
-      const line = event.trim();
-      if (!line.startsWith("data:")) continue;
-      const dataStr = line.slice(5).trim();
-      if (!dataStr || dataStr === "[DONE]") continue;
-
-      let parsed: StreamChunk;
-      try {
-        parsed = JSON.parse(dataStr);
-      } catch {
-        continue;
-      }
-
-      const delta =
-        parsed.choices?.[0]?.delta?.content ??
-        parsed.choices?.[0]?.message?.content ??
-        parsed.choices?.[0]?.text ??
-        "";
-      if (typeof delta === "string" && delta) {
-        full += delta;
-        onDelta(full);
-      }
+      handleEvent(event);
     }
+  }
+
+  if (buffer.trim()) {
+    handleEvent(buffer);
   }
 
   return full;
